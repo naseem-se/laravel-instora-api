@@ -1,0 +1,52 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+
+          script: |
+            set -e
+
+            cd domains/nusvitahealth.com/public_html/api.installment.system
+
+            echo "Deploying..."
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "Current commit:"
+            git rev-parse HEAD
+
+            composer install --no-dev --optimize-autoloader
+
+            mkdir -p storage/backups
+
+            # mysqldump \
+            #   -u "${{ secrets.DB_USER }}" \
+            #   -p'${{ secrets.DB_PASS }}' \
+            #   "${{ secrets.DB_NAME }}" \
+            #   > "storage/backups/backup_$(date +%F_%H-%M-%S).sql"
+
+            php artisan migrate --force
+
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+
+            php artisan queue:restart
+
+            echo "Deployment completed successfully."
