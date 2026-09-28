@@ -1,11 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\CompanyController as AdminCompanyController;
-use App\Http\Controllers\Api\V1\Admin\WhatsAppAccessController;
-use App\Http\Controllers\Api\V1\Admin\WhatsAppController as AdminWhatsAppController;
 use App\Http\Controllers\Api\V1\Admin\CompanyUserController;
 use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\SubscriptionController;
+use App\Http\Controllers\Api\V1\Admin\WhatsAppAccessController;
+use App\Http\Controllers\Api\V1\Admin\WhatsAppController as AdminWhatsAppController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\CompanyProfileController;
@@ -33,8 +33,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::get('health', HealthController::class)->name('health');
 
+    // EXACT FIX: Removed redundant 'web' middleware from auth/login
     Route::post('auth/login', [AuthController::class, 'login'])
-        ->middleware(['web', 'throttle:login'])
+        ->middleware('throttle:login')
         ->name('auth.login');
 
     Route::post('auth/forgot-password', [PasswordResetController::class, 'sendResetLink'])
@@ -54,7 +55,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     Route::middleware(['auth:sanctum', ResolveCompanyContext::class])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
-        Route::post('auth/logout', [AuthController::class, 'logout'])->middleware('web')->name('auth.logout');
+        
+        // EXACT FIX: Removed redundant 'web' middleware from auth/logout
+        Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
 
         Route::get('company', [CompanyProfileController::class, 'show'])->name('company.show');
         Route::put('company', [CompanyProfileController::class, 'update'])->name('company.update');
@@ -152,7 +155,6 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
             Route::get('dashboard', [DashboardController::class, 'show'])->name('dashboard');
             Route::post('companies/{companyId}/users', [CompanyUserController::class, 'store'])->name('companies.users.store');
-
 
             Route::prefix('subscriptions')->name('subscriptions.')->group(function () {
                 Route::get('/', [SubscriptionController::class, 'index'])->name('index');

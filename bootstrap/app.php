@@ -16,8 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // Sanctum SPA session authentication for first-party frontend requests.
-        $middleware->statefulApi();
+        $middleware->validateCsrfTokens(except: [
+            'api/*',
+        ]);
         $middleware->redirectGuestsTo(fn (Request $request) => config('app.frontend_url').'/login');
         $middleware->api(prepend: [RequestId::class]);
         // $middleware->throttleApi();

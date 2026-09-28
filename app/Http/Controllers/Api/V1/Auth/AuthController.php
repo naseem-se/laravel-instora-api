@@ -20,72 +20,42 @@ class AuthController extends Controller
 {
     public function __construct(private readonly AuditLogger $audit) {}
 
-    public function login(LoginRequest $request): JsonResponse
+    public function login(Request $request)
     {
-        $credentials = $request->only('email', 'password');
-
-        if (! Auth::attempt($credentials)) {
-            $this->audit->log(
-                AuditAction::LoginFailed->value,
-                newValues: ['email' => $credentials['email']],
-            );
-
-            throw ValidationException::withMessages([
-                'email' => ['These credentials do not match our records.'],
-            ]);
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+    
+        if (!Auth::attempt($credentials)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials.',
+            ], 401);
         }
-
-        $request->session()->regenerate();
-
-        /** @var \App\Models\User $user */
-        $user = $request->user()->load('company');
-
-        if ($user->status !== UserStatus::Active) {
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            throw ValidationException::withMessages([
-                'email' => ['This account is not active. Contact your administrator.'],
-            ]);
-        }
-
-        if ($user->company && $user->company->status !== CompanyStatus::Active) {
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            throw ValidationException::withMessages([
-                'email' => ['This company account is not active. Contact your administrator.'],
-            ]);
-        }
-
-        $user->forceFill(['last_login_at' => now()])->saveQuietly();
-
-        app(PermissionRegistrar::class)->setPermissionsTeamId($user->company_id);
-
-        $this->audit->log(
-            AuditAction::Login->value,
-            entity: $user,
-            companyId: $user->company_id,
-            userId: $user->id,
-        );
-
-        return ApiResponse::success(
-            new UserResource($user->load(['company', 'roles'])),
-            'Logged in successfully.'
-        );
+    
+        $user = Auth::user();
+    
+        // Revoke old tokens if desired, then generate a new token
+        $user->tokens()->delete();
+        $token = $user->createToken('auth_token')->plainTextToken;
+    
+        return response()->json([
+            'success' => true,
+            'message' => 'Logged in successfully.',
+            'token' => $token, // <--- Return token to React
+            'user' => $user,
+        ]);
     }
 
     public function logout(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
         if ($user) {
+            // Revoke current token
+            $request->user()->currentAccessToken()->delete();
+
             $this->audit->log(
                 AuditAction::Logout->value,
                 entity: $user,
