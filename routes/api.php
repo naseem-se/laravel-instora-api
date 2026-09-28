@@ -34,7 +34,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::get('health', HealthController::class)->name('health');
 
     Route::post('auth/login', [AuthController::class, 'login'])
-        ->middleware('throttle:login')
+        ->middleware(['web', 'throttle:login'])
         ->name('auth.login');
 
     Route::post('auth/forgot-password', [PasswordResetController::class, 'sendResetLink'])
@@ -54,7 +54,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     Route::middleware(['auth:sanctum', ResolveCompanyContext::class])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
-        Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
+        Route::post('auth/logout', [AuthController::class, 'logout'])->middleware('web')->name('auth.logout');
 
         Route::get('company', [CompanyProfileController::class, 'show'])->name('company.show');
         Route::put('company', [CompanyProfileController::class, 'update'])->name('company.update');
