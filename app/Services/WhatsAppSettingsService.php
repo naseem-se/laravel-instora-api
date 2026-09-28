@@ -47,7 +47,22 @@ class WhatsAppSettingsService
         $provider->created_by ??= $actor->id;
         $provider->updated_by = $actor->id;
 
-        $credentials = $provider->credentials ?? [];
+        // Safely retrieve existing credentials. If decryption fails (e.g., APP_KEY changed
+        // since they were stored), discard them and start fresh with only the new values.
+        try {
+            $credentials = $provider->exists ? ($provider->credentials ?? []) : [];
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('WhatsApp: could not decrypt existing credentials; starting fresh.', [
+                'provider_id' => $provider->id ?? 'new',
+                'exception' => $e->getMessage(),
+            ]);
+            $credentials = [];
+        }
+
+        if (! is_array($credentials)) {
+            $credentials = [];
+        }
+
         foreach ($data['credentials'] ?? [] as $key => $value) {
             if ($value !== null && $value !== '') {
                 $credentials[$key] = $value;
@@ -81,6 +96,13 @@ class WhatsAppSettingsService
         $provider->last_verified_at = Carbon::now();
         $provider->last_error = $health->healthy ? null : $health->message;
         $provider->save();
+
+        \Illuminate\Support\Facades\Log::info('WhatsApp: provider verification completed.', [
+            'provider_id' => $provider->id,
+            'status' => $provider->status->value,
+            'healthy' => $health->healthy,
+            'error' => $health->message,
+        ]);
 
         return $provider;
     }
