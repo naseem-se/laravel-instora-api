@@ -50,7 +50,8 @@ class AppServiceProvider extends ServiceProvider
         // route - the standard pattern for an API-only backend paired with
         // a separate frontend.
         ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
-            $frontendUrl = rtrim((string) env('FRONTEND_URL'), '/');
+            // Use config() instead of env()
+            $frontendUrl = rtrim((string) config('app.frontend_url'), '/');
 
             return "{$frontendUrl}/reset-password?token={$token}&email=".urlencode($notifiable->getEmailForPasswordReset());
         });
