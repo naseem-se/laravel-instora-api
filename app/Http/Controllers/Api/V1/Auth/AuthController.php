@@ -35,6 +35,16 @@ class AuthController extends Controller
         }
     
         $user = Auth::user();
+
+        if ($user->company_id !== null && $user->company?->status !== CompanyStatus::Active) {
+            Auth::guard('web')->logout();
+
+            return ApiResponse::error(
+                'This company account is suspended. Contact your administrator.',
+                'COMPANY_INACTIVE',
+                403,
+            );
+        }
     
         // Revoke old tokens if desired, then generate a new token
         $user->tokens()->delete();

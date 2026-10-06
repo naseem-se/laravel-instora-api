@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Enums\UserStatus;
+use App\Enums\CompanyStatus;
 use App\Models\Company;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -66,6 +67,27 @@ class LoginTest extends TestCase
 
         $response->assertStatus(422);
         $this->assertGuest();
+    }
+
+    public function test_user_cannot_login_when_their_company_is_suspended(): void
+    {
+        $company = Company::factory()->create(['status' => CompanyStatus::Suspended]);
+        $user = User::factory()->for($company)->create([
+            'password' => 'Password123',
+            'status' => UserStatus::Active,
+        ]);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => $user->email,
+            'password' => 'Password123',
+        ]);
+
+        $response->assertForbidden()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('code', 'COMPANY_INACTIVE')
+            ->assertJsonPath('message', 'This company account is suspended. Contact your administrator.');
+        $this->assertGuest();
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_me_endpoint_requires_authentication(): void
