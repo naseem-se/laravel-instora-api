@@ -12,19 +12,19 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 
-Schedule::command(SendInstallmentRemindersCommand::class)
-    ->everyMinute()
-    ->withoutOverlapping();
-
-Schedule::command(EnforceSubscriptionBillingCommand::class)
-    ->everyMinute()
-    ->withoutOverlapping();
-
-
 // Schedule::command(SendInstallmentRemindersCommand::class)
-//     ->dailyAt('09:00')
+//     ->everyMinute()
 //     ->withoutOverlapping();
 
 // Schedule::command(EnforceSubscriptionBillingCommand::class)
-//     ->dailyAt('06:00')
+//     ->everyMinute()
 //     ->withoutOverlapping();
+
+
+Schedule::command(SendInstallmentRemindersCommand::class)
+    ->dailyAt('09:00')
+    ->withoutOverlapping();
+
+Schedule::command(EnforceSubscriptionBillingCommand::class)
+    ->dailyAt('06:00')
+    ->withoutOverlapping();

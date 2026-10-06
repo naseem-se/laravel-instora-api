@@ -16,7 +16,7 @@ class EnforceSubscriptionBillingCommand extends Command
 {
     protected $signature = 'subscriptions:enforce';
 
-    protected $description = 'Generates due subscription invoices, marks overdue ones, and auto-suspends companies whose grace period has lapsed.';
+    protected $description = 'Generates due subscription invoices, marks overdue ones, and auto-suspends companies with overdue invoices.';
 
     public function __construct(private readonly SubscriptionService $subscriptions)
     {
@@ -81,19 +81,6 @@ class EnforceSubscriptionBillingCommand extends Command
                         ->first();
 
                     if (! $overdueInvoice) {
-                        continue;
-                    }
-
-                    $daysOverdue = now()->startOfDay()->diffInDays(Carbon::parse($overdueInvoice->due_date)->startOfDay());
-
-                    if ($daysOverdue <= $subscription->grace_period_days) {
-                        // Still inside the window - flag it but leave the
-                        // company's operational status untouched.
-                        if ($subscription->status !== SubscriptionStatus::Grace) {
-                            $subscription->status = SubscriptionStatus::Grace;
-                            $subscription->save();
-                        }
-
                         continue;
                     }
 
