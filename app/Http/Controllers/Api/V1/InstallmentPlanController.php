@@ -10,8 +10,11 @@ use App\Http\Requests\InstallmentPlan\StoreSettlementRequest;
 use App\Http\Resources\InstallmentPlanListResource;
 use App\Http\Resources\InstallmentPlanResource;
 use App\Http\Resources\SettlementResource;
+use App\Http\Resources\SaleResource;
+use App\Models\Sale;
 use App\Models\InstallmentPlan;
 use App\Services\InstallmentPlanService;
+use App\Services\SaleService;
 use App\Services\SettlementService;
 use App\Support\ApiResponse;
 use App\Support\CompanyContext;
@@ -25,6 +28,7 @@ class InstallmentPlanController extends Controller
     public function __construct(
         private readonly InstallmentPlanService $plans,
         private readonly SettlementService $settlements,
+        private readonly SaleService $sales,
     ) {}
 
     public function index(ListInstallmentPlansRequest $request, CompanyContext $context): JsonResponse
@@ -78,6 +82,15 @@ class InstallmentPlanController extends Controller
         ));
     }
 
+    public function destroy(Request $request, int $id, CompanyContext $context): JsonResponse
+    {
+        $plan = $this->findOwned(InstallmentPlan::class, $id, $context);
+        $this->authorize('delete', $plan);
+        $this->plans->delete($plan, $request->user());
+
+        return ApiResponse::success(null, 'Completed installment plan deleted successfully.');
+    }
+
     public function approve(Request $request, int $id, CompanyContext $context): JsonResponse
     {
         $plan = $this->findOwned(InstallmentPlan::class, $id, $context);
@@ -95,6 +108,13 @@ class InstallmentPlanController extends Controller
     {
         $plan = $this->findOwned(InstallmentPlan::class, $id, $context);
         $this->authorize('cancel', $plan);
+
+        $sale = Sale::query()->where('installment_plan_id', $plan->id)->first();
+        if ($sale) {
+            $sale = $this->sales->cancel($sale, $request->validated()['reason'] ?? 'Cancelled from installment plan', $request->user());
+
+            return ApiResponse::success(new SaleResource($sale), 'Installment sale cancelled successfully.');
+        }
 
         $plan = $this->plans->cancel($plan, $request->user(), $request->validated()['reason'] ?? null);
 

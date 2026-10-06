@@ -45,6 +45,7 @@ class Invoice extends Model
             'due_date' => 'date',
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
+            'additional_charges' => 'decimal:2',
             'tax' => 'decimal:2',
             'interest' => 'decimal:2',
             'late_fee' => 'decimal:2',
@@ -68,6 +69,11 @@ class Invoice extends Model
     public function installmentPlan(): BelongsTo
     {
         return $this->belongsTo(InstallmentPlan::class);
+    }
+
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class);
     }
 
     public function createdBy(): BelongsTo

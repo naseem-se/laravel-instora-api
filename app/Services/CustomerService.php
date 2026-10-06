@@ -69,19 +69,36 @@ class CustomerService
 
     public function delete(Customer $customer, User $actor): void
     {
-        if ($customer->installmentPlans()->exists()) {
-            throw new CustomerHasActiveRecordsException();
-        }
+        DB::transaction(function () use ($customer, $actor) {
+            Company::where('id', $customer->company_id)->lockForUpdate()->first();
+            $customer = Customer::query()->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+            $plans = $customer->installmentPlans()->lockForUpdate()->get();
 
-        $customer->delete();
+            if ($plans->contains(fn ($plan) => $plan->status->value !== 'completed')) {
+                throw new CustomerHasActiveRecordsException();
+            }
 
-        $this->audit->log(
-            AuditAction::CustomerDeleted->value,
-            entity: $customer,
-            oldValues: ['customer_number' => $customer->customer_number, 'name' => $customer->name],
-            companyId: $customer->company_id,
-            userId: $actor->id,
-        );
+            foreach ($plans as $plan) {
+                $plan->delete();
+                $this->audit->log(
+                    AuditAction::InstallmentPlanDeleted->value,
+                    entity: $plan,
+                    oldValues: ['plan_number' => $plan->plan_number, 'status' => $plan->status->value],
+                    companyId: $plan->company_id,
+                    userId: $actor->id,
+                );
+            }
+
+            $customer->delete();
+
+            $this->audit->log(
+                AuditAction::CustomerDeleted->value,
+                entity: $customer,
+                oldValues: ['customer_number' => $customer->customer_number, 'name' => $customer->name],
+                companyId: $customer->company_id,
+                userId: $actor->id,
+            );
+        });
     }
 
     private function nextCustomerNumber(int $companyId): string

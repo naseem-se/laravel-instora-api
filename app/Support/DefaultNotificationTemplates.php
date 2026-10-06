@@ -202,6 +202,8 @@ class DefaultNotificationTemplates
                 Paid to date: {{paid_amount}}
                 Remaining balance: {{remaining_balance}}
 
+                A copy of your invoice is attached to this email.
+
                 Please keep to the scheduled due dates so your account remains in good standing. If you have any questions, quote your plan number when you contact us.
 
                 Sincerely,

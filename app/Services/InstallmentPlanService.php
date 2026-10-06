@@ -10,10 +10,13 @@ use App\Enums\InvoiceStatus;
 use App\Enums\LateFeeType;
 use App\Exceptions\PlanNotApprovableException;
 use App\Exceptions\PlanNotCancellableException;
+use App\Exceptions\PlanNotDeletableException;
 use App\Models\Company;
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InstallmentPlan;
 use App\Models\Product;
+use App\Models\Sale;
 use App\Models\User;
 use App\Services\Installment\DueDateGenerator;
 use App\Services\Installment\InstallmentCalculator;
@@ -37,6 +40,7 @@ class InstallmentPlanService
         private readonly InvoiceService $invoices,
         private readonly NotificationService $notifications,
         private readonly AuditLogger $audit,
+        private readonly PaymentService $payments,
     ) {}
 
     public function create(array $data, CompanyContext $context, User $actor): InstallmentPlan
@@ -45,6 +49,7 @@ class InstallmentPlanService
 
         return DB::transaction(function () use ($data, $companyId, $actor) {
             Company::where('id', $companyId)->lockForUpdate()->first();
+            Customer::query()->where('company_id', $companyId)->whereKey($data['customer_id'])->firstOrFail();
 
             $chargeType = FinancialChargeType::from($data['financial_charge_type']);
             $lateFeeType = LateFeeType::from($data['late_fee_type']);
@@ -150,15 +155,18 @@ class InstallmentPlanService
 
             // The customer now owes the full plan total - post it as a debit.
             // Every payment against this plan posts a matching credit.
+            $sale = Sale::query()->where('installment_plan_id', $plan->id)->first();
             $this->ledger->record(
                 companyId: $plan->company_id,
                 customerId: $plan->customer_id,
-                transactionType: 'installment_plan',
-                referenceType: 'installment_plan',
-                referenceId: $plan->id,
-                debitCents: Money::toCents($plan->total_amount),
+                transactionType: $sale ? 'sale' : 'installment_plan',
+                referenceType: $sale ? 'sale' : 'installment_plan',
+                referenceId: $sale?->id ?? $plan->id,
+                debitCents: $sale
+                    ? Money::toCents($sale->total_amount) + Money::toCents($plan->interest_amount)
+                    : Money::toCents($plan->total_amount),
                 creditCents: 0,
-                description: "Installment plan {$plan->plan_number} approved",
+                description: $sale ? "Installment sale {$sale->sale_number}" : "Installment plan {$plan->plan_number} approved",
                 createdBy: $actor->id,
                 installmentPlanId: $plan->id,
             );
@@ -168,12 +176,43 @@ class InstallmentPlanService
             // separate manual step.
             $invoice = $this->invoices->createForPlan($plan, $actor);
 
+            if ($sale) {
+                $sale->invoice_id = $invoice->id;
+                $sale->status = 'completed';
+                $sale->sold_at = now();
+                $sale->save();
+
+                $downPaymentCents = Money::toCents($sale->down_payment);
+                if ($downPaymentCents > 0) {
+                    $this->payments->recordSalePayment(
+                        $sale,
+                        $invoice,
+                        $downPaymentCents,
+                        \App\Enums\PaymentMethod::from($sale->payment_method),
+                        $actor,
+                        "Down payment for sale {$sale->sale_number}",
+                    );
+                }
+            }
+
+            $notificationVariables = NotificationVariables::forPlan($plan);
+            if ($sale) {
+                $currency = $plan->company?->currency ?? 'PKR';
+                $notificationVariables = array_merge($notificationVariables, [
+                    'total_amount' => Money::format($currency, Money::fromCents(
+                        Money::toCents($sale->total_amount) + Money::toCents($plan->interest_amount)
+                    )),
+                    'paid_amount' => Money::format($currency, $sale->down_payment),
+                    'remaining_balance' => Money::format($currency, $plan->total_amount),
+                ]);
+            }
+
             $this->notifications->send(
                 companyId: $plan->company_id,
                 customerId: $plan->customer_id,
                 type: NotificationType::PlanApproved,
                 channel: NotificationChannel::Email,
-                variables: NotificationVariables::forPlan($plan),
+                variables: $notificationVariables,
                 referenceType: 'invoice',
                 referenceId: $invoice->id,
             );
@@ -190,9 +229,28 @@ class InstallmentPlanService
         });
     }
 
+    public function delete(InstallmentPlan $plan, User $actor): void
+    {
+        DB::transaction(function () use ($plan, $actor) {
+            $lockedPlan = InstallmentPlan::query()->whereKey($plan->id)->lockForUpdate()->firstOrFail();
+            if ($lockedPlan->status !== InstallmentPlanStatus::Completed) {
+                throw new PlanNotDeletableException();
+            }
+
+            $lockedPlan->delete();
+            $this->audit->log(
+                AuditAction::InstallmentPlanDeleted->value,
+                entity: $lockedPlan,
+                oldValues: ['plan_number' => $lockedPlan->plan_number, 'status' => $lockedPlan->status->value],
+                companyId: $lockedPlan->company_id,
+                userId: $actor->id,
+            );
+        });
+    }
+
     public function cancel(InstallmentPlan $plan, User $actor, ?string $reason = null): InstallmentPlan
     {
-        if (! in_array($plan->status, [InstallmentPlanStatus::Pending, InstallmentPlanStatus::Active], true)) {
+        if (! in_array($plan->status, [InstallmentPlanStatus::Pending, InstallmentPlanStatus::Active, InstallmentPlanStatus::Overdue], true)) {
             throw new PlanNotCancellableException();
         }
 
@@ -203,7 +261,7 @@ class InstallmentPlanService
         }
 
         return DB::transaction(function () use ($plan, $actor, $reason) {
-            $wasActive = $plan->status === InstallmentPlanStatus::Active;
+            $wasActive = in_array($plan->status, [InstallmentPlanStatus::Active, InstallmentPlanStatus::Overdue], true);
             $currentStatus = $plan->status instanceof InstallmentPlanStatus
                 ? $plan->status->value
                 : (string) $plan->status;
@@ -212,18 +270,21 @@ class InstallmentPlanService
             $plan->save();
 
             if ($wasActive) {
-                $this->ledger->record(
-                    companyId: $plan->company_id,
-                    customerId: $plan->customer_id,
-                    transactionType: 'installment_plan_cancellation',
-                    referenceType: 'installment_plan',
-                    referenceId: $plan->id,
-                    debitCents: 0,
-                    creditCents: Money::toCents($plan->total_amount),
-                    description: "Installment plan {$plan->plan_number} cancelled",
-                    createdBy: $actor->id,
-                    installmentPlanId: $plan->id,
-                );
+                $sale = Sale::query()->where('installment_plan_id', $plan->id)->first();
+                if (! $sale) {
+                    $this->ledger->record(
+                        companyId: $plan->company_id,
+                        customerId: $plan->customer_id,
+                        transactionType: 'installment_plan_cancellation',
+                        referenceType: 'installment_plan',
+                        referenceId: $plan->id,
+                        debitCents: 0,
+                        creditCents: Money::toCents($plan->total_amount),
+                        description: "Installment plan {$plan->plan_number} cancelled",
+                        createdBy: $actor->id,
+                        installmentPlanId: $plan->id,
+                    );
+                }
 
                 $invoice = Invoice::query()
                     ->where('installment_plan_id', $plan->id)

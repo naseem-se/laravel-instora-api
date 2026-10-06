@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\CustomerNoteController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InstallmentController;
 use App\Http\Controllers\Api\V1\InstallmentPlanController;
+use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationTemplateController;
 use App\Http\Controllers\Api\V1\PaymentController;
@@ -23,6 +24,7 @@ use App\Http\Controllers\Api\V1\ProductCategoryController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
+use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\WhatsAppSettingsController;
 use App\Http\Controllers\Api\V1\WhatsAppWebhookController;
@@ -92,8 +94,23 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::apiResource('products', ProductController::class)
             ->parameters(['products' => 'id']);
 
+        Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
+        Route::get('inventory/history', [InventoryController::class, 'history'])->name('inventory.history');
+        Route::post('inventory/movements', [InventoryController::class, 'storeMovement'])->name('inventory.movements.store');
+        Route::post('inventory/warehouses', [InventoryController::class, 'storeWarehouse'])->name('inventory.warehouses.store');
+        Route::put('inventory/warehouses/{id}', [InventoryController::class, 'updateWarehouse'])->name('inventory.warehouses.update');
+        Route::delete('inventory/warehouses/{id}', [InventoryController::class, 'destroyWarehouse'])->name('inventory.warehouses.destroy');
+
+        Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
+        Route::post('sales', [SaleController::class, 'store'])->name('sales.store');
+        Route::get('sales/{id}', [SaleController::class, 'show'])->name('sales.show');
+        Route::post('sales/{id}/cancel', [SaleController::class, 'cancel'])->name('sales.cancel');
+        Route::post('sales/{id}/return', [SaleController::class, 'return'])->name('sales.return');
+        Route::get('sales/{id}/invoice', [SaleController::class, 'invoice'])->name('sales.invoice');
+        Route::get('sales/{id}/agreement', [SaleController::class, 'agreement'])->name('sales.agreement');
+
         Route::apiResource('installment-plans', InstallmentPlanController::class)
-            ->only(['index', 'store', 'show'])
+            ->only(['index', 'store', 'show', 'destroy'])
             ->parameters(['installment-plans' => 'id']);
 
         Route::post('installment-plans/{id}/approve', [InstallmentPlanController::class, 'approve'])

@@ -29,7 +29,7 @@ class UpdateProductRequest extends FormRequest
             'cost_price' => ['sometimes', 'numeric', 'min:0'],
             'cash_price' => ['sometimes', 'numeric', 'min:0'],
             'installment_price' => ['nullable', 'numeric', 'min:0'],
-            'stock_quantity' => ['nullable', 'numeric', 'min:0'],
+            'reorder_level' => ['nullable', 'integer', 'min:0'],
             'status' => ['sometimes', Rule::in(ActiveStatus::values())],
         ];
     }

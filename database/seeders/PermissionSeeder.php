@@ -15,6 +15,10 @@ class PermissionSeeder extends Seeder
 
         'products.view', 'products.create', 'products.update', 'products.delete',
 
+        'inventory.view', 'inventory.manage',
+
+        'sales.view', 'sales.create', 'sales.manage',
+
         'installments.view', 'installments.create', 'installments.update', 'installments.delete',
         'installments.approve', 'installments.cancel', 'installments.settle',
 

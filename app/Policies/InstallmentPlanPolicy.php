@@ -37,6 +37,13 @@ class InstallmentPlanPolicy
         return $user->can('installments.settle') && $this->sameCompany($user, $plan);
     }
 
+    public function delete(User $user, InstallmentPlan $plan): bool
+    {
+        return $user->can('installments.delete')
+            && $this->sameCompany($user, $plan)
+            && $plan->status->value === 'completed';
+    }
+
     private function sameCompany(User $user, InstallmentPlan $plan): bool
     {
         return $user->company_id === null || $user->company_id === $plan->company_id;

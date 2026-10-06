@@ -3,6 +3,9 @@
 namespace App\Services\Notification\Channels;
 
 use App\Enums\NotificationType;
+use App\Models\Customer;
+use App\Models\InstallmentPlan;
+use App\Models\Invoice;
 use App\Models\NotificationLog;
 use App\Models\Payment;
 use App\Services\Notification\Contracts\NotificationChannelHandler;
@@ -24,7 +27,30 @@ class EmailChannelHandler implements NotificationChannelHandler
             $attachmentData = null;
             $attachmentName = null;
 
-            if ($log->type === NotificationType::PaymentReceived && $log->payment_id) {
+            if ($log->type === NotificationType::PlanApproved && $log->invoice_id) {
+              $invoice = Invoice::with(['items', 'company'])->find($log->invoice_id);
+              $plan = $invoice?->installment_plan_id
+                ? InstallmentPlan::withTrashed()->find($invoice->installment_plan_id)
+                : null;
+              $customer = $invoice?->customer_id ? Customer::withTrashed()->find($invoice->customer_id) : null;
+
+              if ($invoice && $plan && $customer && $invoice->company) {
+                $pdf = Pdf::loadView('pdf.invoice', [
+                  'invoice' => $invoice,
+                  'plan' => $plan,
+                  'customer' => $customer,
+                  'company' => $invoice->company,
+                ]);
+                $attachmentData = $pdf->output();
+                $attachmentName = "invoice_{$invoice->invoice_number}.pdf";
+              }
+
+              if (! $attachmentData) {
+                throw new \RuntimeException('The approved installment invoice could not be prepared.');
+              }
+            }
+
+            if (! $attachmentData && $log->type === NotificationType::PaymentReceived && $log->payment_id) {
                 $payment = Payment::with([
                     'installmentPlan.customer',
                     'installmentPlan.company',

@@ -64,6 +64,11 @@ class Payment extends Model
         return $this->belongsTo(InstallmentPlan::class);
     }
 
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class);
+    }
+
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);

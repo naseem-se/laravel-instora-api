@@ -20,9 +20,13 @@ enum AuditAction: string
     case InstallmentPlanApproved = 'installment_plan.approved';
     case InstallmentPlanCancelled = 'installment_plan.cancelled';
     case InstallmentPlanSettled = 'installment_plan.settled';
+    case InstallmentPlanDeleted = 'installment_plan.deleted';
     case LateFeeWaived = 'installment.late_fee_waived';
     case PaymentCreated = 'payment.created';
     case PaymentReversed = 'payment.reversed';
+    case SaleCreated = 'sale.created';
+    case SaleCancelled = 'sale.cancelled';
+    case SaleReturned = 'sale.returned';
     case NotificationRetried = 'notification.retried';
     case WhatsAppProviderConfigured = 'whatsapp_provider.configured';
     case WhatsAppProviderUpdated = 'whatsapp_provider.updated';

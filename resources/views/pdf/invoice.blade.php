@@ -45,7 +45,8 @@
             <td width="50%" class="text-right">
                 <div><span class="label">Invoice number:</span> {{ $invoice->invoice_number }}</div>
                 <div><span class="label">Invoice date:</span> {{ $invoice->invoice_date->format('d M Y') }}</div>
-                <div><span class="label">Plan number:</span> {{ $plan->plan_number }}</div>
+                @if($plan)<div><span class="label">Plan number:</span> {{ $plan->plan_number }}</div>@endif
+                @if(isset($sale))<div><span class="label">Sale number:</span> {{ $sale->sale_number }}</div>@endif
                 <div><span class="label">Status:</span> {{ ucfirst($invoice->status->value) }}</div>
             </td>
         </tr>
@@ -74,6 +75,12 @@
 
     <table class="totals-table">
         <tr><td>Subtotal</td><td class="text-right">{{ $company->currency }} {{ number_format($invoice->subtotal, 2) }}</td></tr>
+        @if($invoice->additional_charges > 0)
+        <tr><td>Additional charges</td><td class="text-right">{{ $company->currency }} {{ number_format($invoice->additional_charges, 2) }}</td></tr>
+        @endif
+        @if($invoice->tax > 0)
+        <tr><td>Tax</td><td class="text-right">{{ $company->currency }} {{ number_format($invoice->tax, 2) }}</td></tr>
+        @endif
         @if($invoice->interest > 0)
         <tr><td>Financing charge</td><td class="text-right">{{ $company->currency }} {{ number_format($invoice->interest, 2) }}</td></tr>
         @endif
@@ -86,7 +93,11 @@
     </table>
 
     <div class="footer">
+        @if($plan)
         This invoice reflects the total amount financed through installment plan {{ $plan->plan_number }} and is payable per the plan's installment schedule.
+        @else
+        Thank you for your purchase. This invoice is your proof of sale.
+        @endif
     </div>
 </body>
 </html>

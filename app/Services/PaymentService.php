@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AuditAction;
 use App\Enums\InstallmentPlanStatus;
+use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Exceptions\OverpaymentNotAllowedException;
 use App\Exceptions\InvoiceNotPayableException;
@@ -11,6 +12,8 @@ use App\Exceptions\PlanNotPayableException;
 use App\Models\Company;
 use App\Models\InstallmentPlan;
 use App\Models\Payment;
+use App\Models\Invoice;
+use App\Models\Sale;
 use App\Models\User;
 use App\Support\CompanyContext;
 use App\Support\Money;
@@ -75,6 +78,7 @@ class PaymentService
             $payment->customer_id = $plan->customer_id;
             $payment->installment_plan_id = $plan->id;
             $payment->invoice_id = $invoice?->id;
+            $payment->sale_id = $invoice?->sale_id;
             $payment->received_by = $actor->id;
             $payment->status = PaymentStatus::Completed;
             $payment->save();
@@ -126,6 +130,65 @@ class PaymentService
 
             return $payment->load('allocations.installment');
         });
+    }
+
+    public function recordSalePayment(
+        Sale $sale,
+        Invoice $invoice,
+        int $amountCents,
+        PaymentMethod $method,
+        User $actor,
+        string $description,
+    ): Payment {
+        $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+        $outstandingCents = max(
+            Money::toCents($invoice->total_amount) - Money::toCents($invoice->paid_amount),
+            0,
+        );
+        if (Money::toCents($invoice->balance_amount) !== $outstandingCents) {
+            $invoice->balance_amount = Money::fromCents($outstandingCents);
+            $invoice->save();
+        }
+
+        if ($amountCents <= 0 || $amountCents > $outstandingCents) {
+            throw new OverpaymentNotAllowedException();
+        }
+
+        $payment = new Payment([
+            'payment_date' => now(),
+            'amount' => Money::fromCents($amountCents),
+            'payment_method' => $method,
+        ]);
+        $payment->company_id = $sale->company_id;
+        $payment->customer_id = $sale->customer_id;
+        $payment->sale_id = $sale->id;
+        $payment->invoice_id = $invoice->id;
+        $payment->payment_number = $this->nextPaymentNumber($sale->company_id);
+        $payment->received_by = $actor->id;
+        $payment->status = PaymentStatus::Completed;
+        $payment->save();
+
+        $this->invoices->applyPayment($invoice, $amountCents);
+        $this->ledger->record(
+            companyId: $sale->company_id,
+            customerId: $sale->customer_id,
+            transactionType: 'sale_payment',
+            referenceType: 'payment',
+            referenceId: $payment->id,
+            debitCents: 0,
+            creditCents: $amountCents,
+            description: $description,
+            createdBy: $actor->id,
+        );
+        $this->audit->log(
+            AuditAction::PaymentCreated->value,
+            entity: $payment,
+            newValues: ['payment_number' => $payment->payment_number, 'amount' => $payment->amount, 'sale_id' => $sale->id],
+            companyId: $sale->company_id,
+            userId: $actor->id,
+        );
+
+        return $payment;
     }
 
     private function nextPaymentNumber(int $companyId): string

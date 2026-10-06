@@ -21,6 +21,7 @@ class Product extends Model
             'cash_price' => 'decimal:2',
             'installment_price' => 'decimal:2',
             'stock_quantity' => 'decimal:3',
+            'reorder_level' => 'decimal:3',
             'status' => ActiveStatus::class,
         ];
     }
