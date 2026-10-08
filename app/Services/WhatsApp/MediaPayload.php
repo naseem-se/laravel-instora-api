@@ -9,5 +9,6 @@ readonly class MediaPayload
         public string $mediaUrl,
         public string $mediaType, // image|document|video
         public ?string $caption = null,
+        public ?string $fileName = null,
     ) {}
 }

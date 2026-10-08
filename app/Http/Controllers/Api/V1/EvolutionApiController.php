@@ -93,8 +93,8 @@ class EvolutionApiController extends Controller
                 ],
             );
 
-            if ($createResponse->successful() || $createResponse->status() === 409) {
-                // 409 = instance already exists, fetch a fresh QR.
+            if ($createResponse->successful() || $createResponse->status() === 409 || $createResponse->status() === 403) {
+                // 409/403 = instance already exists, fetch a fresh QR.
                 $qrResponse = $this->http->get(
                     "{$baseUrl}/instance/connect/{$sessionName}",
                     $this->headers($apiKey),

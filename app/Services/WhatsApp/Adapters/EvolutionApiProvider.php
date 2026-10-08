@@ -31,7 +31,7 @@ class EvolutionApiProvider implements WhatsAppProviderInterface
 
     public function sendText(MessagePayload $payload): SendResult
     {
-        return $this->sendMessage($payload->recipient, ['text' => $payload->text]);
+        return $this->sendMessage($payload->recipient, $payload->text);
     }
 
     /**
@@ -55,17 +55,23 @@ class EvolutionApiProvider implements WhatsAppProviderInterface
             }
         }
 
-        return $this->sendMessage($payload->recipient, ['text' => $text]);
+        return $this->sendMessage($payload->recipient, $text);
     }
 
     public function sendMedia(MediaPayload $payload): SendResult
     {
-        return $this->sendMessage($payload->recipient, [
-            'mediatype' => strtoupper($payload->mediaType),
-            'mimetype'  => 'image/jpeg',
+        $data = [
+            'mediatype' => strtolower($payload->mediaType) === 'document' ? 'document' : 'image',
+            'mimetype'  => strtolower($payload->mediaType) === 'document' ? 'application/pdf' : 'image/jpeg',
             'media'     => $payload->mediaUrl,
             'caption'   => $payload->caption ?? '',
-        ]);
+        ];
+
+        if ($payload->fileName) {
+            $data['fileName'] = $payload->fileName;
+        }
+
+        return $this->sendMessage($payload->recipient, $data);
     }
 
     public function verifyConfiguration(): ProviderHealthResult
@@ -116,7 +122,7 @@ class EvolutionApiProvider implements WhatsAppProviderInterface
     // Internal helpers
     // -------------------------------------------------------------------------
 
-    private function sendMessage(string $recipient, array $messageBody): SendResult
+    private function sendMessage(string $recipient, string|array $messageBody): SendResult
     {
         $sessionName = $this->sessionName();
         $baseUrl     = $this->baseUrl();
@@ -130,14 +136,25 @@ class EvolutionApiProvider implements WhatsAppProviderInterface
             );
         }
 
-        // Normalise recipient: Evolution API expects the number with country code but no "+"
+        // Normalise recipient to international format without "+".
+        // e.g. "+923001234567" → "923001234567"
+        //      "03001234567"   → "923001234567"  (Pakistan local)
         $number = ltrim($recipient, '+');
+        if (str_starts_with($number, '0') && strlen($number) <= 11) {
+            // Leading 0 = local Pakistani number, replace 0 with country code 92.
+            $number = '92' . substr($number, 1);
+        }
 
-        $endpoint = isset($messageBody['text'])
-            ? "{$baseUrl}/message/sendText/{$sessionName}"
-            : "{$baseUrl}/message/sendMedia/{$sessionName}";
-
-        $payload = array_merge(['number' => $number], $messageBody);
+        // Build the flat payload Evolution API v2 expects.
+        // Text:  { "number": "...", "text": "plain string" }
+        // Media: { "number": "...", "mediatype": "IMAGE", ... }
+        if (is_string($messageBody)) {
+            $endpoint = "{$baseUrl}/message/sendText/{$sessionName}";
+            $payload  = ['number' => $number, 'text' => $messageBody];
+        } else {
+            $endpoint = "{$baseUrl}/message/sendMedia/{$sessionName}";
+            $payload  = array_merge(['number' => $number], $messageBody);
+        }
 
         try {
             $response = $this->http->post($endpoint, $this->authHeaders(), $payload);

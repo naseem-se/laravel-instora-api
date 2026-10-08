@@ -33,6 +33,12 @@ class SafeWhatsAppHttpClient
 
     private function assertSafe(string $url): void
     {
+        $evolutionUrl = rtrim((string) config('services.evolution_api.url'), '/');
+        
+        if ($evolutionUrl !== '' && str_starts_with($url, $evolutionUrl)) {
+            return; // Trusted self-hosted API defined in .env
+        }
+
         if (! $this->validator->isSafe($url)) {
             throw new RuntimeException('Refusing to call an unsafe or unreachable WhatsApp provider endpoint.');
         }

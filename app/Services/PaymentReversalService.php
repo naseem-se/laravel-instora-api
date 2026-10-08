@@ -103,11 +103,10 @@ class PaymentReversalService
                 installmentPlanId: $plan?->id,
             );
 
-            $this->notifications->send(
+            $this->notifications->sendViaWhatsAppOrEmail(
                 companyId: $payment->company_id,
                 customerId: $payment->customer_id,
                 type: NotificationType::PaymentReversed,
-                channel: NotificationChannel::Email,
                 variables: $plan
                     ? NotificationVariables::forPayment($payment, $plan)
                     : [

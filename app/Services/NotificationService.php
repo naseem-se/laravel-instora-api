@@ -5,12 +5,14 @@ namespace App\Services;
 use App\Enums\NotificationChannel;
 use App\Enums\NotificationStatus;
 use App\Enums\NotificationType;
+use App\Enums\WhatsAppProviderStatus;
 use App\Exceptions\NotificationNotRetryableException;
 use App\Enums\AuditAction;
 use App\Jobs\SendNotificationJob;
 use App\Models\Company;
 use App\Models\Customer;
 use App\Models\NotificationLog;
+use App\Models\WhatsAppProvider;
 use App\Models\User;
 use App\Services\Notification\NotificationPreferenceResolver;
 use App\Services\Notification\NotificationTemplateResolver;
@@ -142,6 +144,43 @@ class NotificationService
 
             return null;
         }
+    }
+
+    /**
+     * Smart channel selector: sends via WhatsApp if the company has an active
+     * provider connected, otherwise falls back to Email only.
+     *
+     * Returns an array of the NotificationLog records created.
+     */
+    public function sendViaWhatsAppOrEmail(
+        int $companyId,
+        int $customerId,
+        NotificationType $type,
+        array $variables = [],
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?string $distinguisher = null,
+    ): array {
+        $hasWhatsApp = WhatsAppProvider::where('company_id', $companyId)
+            ->where('status', WhatsAppProviderStatus::Active)
+            ->exists();
+
+        $channel = $hasWhatsApp
+            ? NotificationChannel::Whatsapp
+            : NotificationChannel::Email;
+
+        $log = $this->send(
+            companyId: $companyId,
+            customerId: $customerId,
+            type: $type,
+            channel: $channel,
+            variables: $variables,
+            referenceType: $referenceType,
+            referenceId: $referenceId,
+            distinguisher: $distinguisher,
+        );
+
+        return $log ? [$log] : [];
     }
 
     public function retry(NotificationLog $log, User $actor, ?string $reason = null): NotificationLog

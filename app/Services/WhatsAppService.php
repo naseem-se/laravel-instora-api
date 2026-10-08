@@ -64,6 +64,40 @@ class WhatsAppService
         return WhatsAppDispatchResult::dispatched($result);
     }
 
+    /**
+     * Send a PDF document file via WhatsApp.
+     * Used to attach invoices/statements alongside notification messages.
+     */
+    public function sendDocument(
+        int $companyId,
+        int $customerId,
+        string $recipient,
+        string $filePath,
+        string $fileName,
+        string $caption = '',
+        ?int $actorUserId = null,
+    ): ?SendResult {
+        $resolution = $this->resolver->resolve($companyId, $customerId, $actorUserId);
+
+        if (! $resolution->authorized) {
+            return null;
+        }
+
+        $adapter = $this->adapters->make($resolution->provider);
+
+        // Evolution API accepts base64-encoded documents via sendMedia
+        $base64 = base64_encode(file_get_contents($filePath));
+        $mediaPayload = new \App\Services\WhatsApp\MediaPayload(
+            recipient: $recipient,
+            mediaUrl: $base64,
+            mediaType: 'document',
+            caption: $caption,
+            fileName: $fileName,
+        );
+
+        return $adapter->sendMedia($mediaPayload);
+    }
+
     private function logMessage(int $notificationLogId, int $companyId, WhatsAppProvider $provider, string $recipient, SendResult $result, string $messageType = 'text'): void
     {
         $message = new WhatsAppMessage([

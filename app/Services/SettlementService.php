@@ -120,11 +120,10 @@ class SettlementService
                 );
             }
 
-            $this->notifications->send(
+            $this->notifications->sendViaWhatsAppOrEmail(
                 companyId: $plan->company_id,
                 customerId: $plan->customer_id,
                 type: NotificationType::PlanSettled,
-                channel: NotificationChannel::Email,
                 variables: NotificationVariables::forPlan($plan),
                 referenceType: 'installment_plan',
                 referenceId: $plan->id,

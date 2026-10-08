@@ -104,11 +104,10 @@ class PaymentService
                 installmentPlanId: $plan->id,
             );
 
-            $this->notifications->send(
+            $this->notifications->sendViaWhatsAppOrEmail(
                 companyId: $companyId,
                 customerId: $plan->customer_id,
                 type: NotificationType::PaymentReceived,
-                channel: NotificationChannel::Email,
                 variables: NotificationVariables::forPayment($payment, $plan, [
                     'invoice_number' => $invoice?->invoice_number ?? '',
                 ]),

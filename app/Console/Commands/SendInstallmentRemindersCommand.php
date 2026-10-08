@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Enums\InstallmentPlanStatus;
 use App\Enums\InstallmentStatus;
-use App\Enums\NotificationChannel;
 use App\Enums\NotificationType;
 use App\Models\Installment;
 use App\Services\InstallmentOverdueStatusService;
@@ -54,18 +53,17 @@ class SendInstallmentRemindersCommand extends Command
                             default => NotificationType::InstallmentOverdue,
                         };
 
-                        $log = $this->notifications->send(
+                        $logs = $this->notifications->sendViaWhatsAppOrEmail(
                             companyId: $installment->company_id,
                             customerId: $installment->customer_id,
                             type: $type,
-                            channel: NotificationChannel::Email,
                             variables: NotificationVariables::forInstallment($installment),
                             referenceType: 'installment',
                             referenceId: $installment->id,
                             distinguisher: (string) $offset,
                         );
 
-                        if ($log) {
+                        if (count($logs) > 0) {
                             $processed++;
                         }
                     }

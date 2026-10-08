@@ -207,11 +207,10 @@ class InstallmentPlanService
                 ]);
             }
 
-            $this->notifications->send(
+            $this->notifications->sendViaWhatsAppOrEmail(
                 companyId: $plan->company_id,
                 customerId: $plan->customer_id,
                 type: NotificationType::PlanApproved,
-                channel: NotificationChannel::Email,
                 variables: $notificationVariables,
                 referenceType: 'invoice',
                 referenceId: $invoice->id,
