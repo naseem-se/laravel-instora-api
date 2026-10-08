@@ -47,6 +47,14 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         ->middleware('throttle:password-reset')
         ->name('auth.reset-password');
 
+    Route::prefix('webhooks/whatsapp/meta')
+        ->name('webhooks.whatsapp.meta.')
+        ->middleware('throttle:whatsapp-webhook')
+        ->group(function () {
+            Route::get('/', [WhatsAppWebhookController::class, 'verifyMeta'])->name('verify');
+            Route::post('/', [WhatsAppWebhookController::class, 'handleMeta'])->name('handle');
+        });
+
     Route::prefix('webhooks/whatsapp/{provider}')
         ->name('webhooks.whatsapp.')
         ->middleware('throttle:whatsapp-webhook')
@@ -150,10 +158,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
         Route::prefix('settings')->name('settings.')->group(function () {
             Route::get('whatsapp', [WhatsAppSettingsController::class, 'show'])->name('whatsapp.show');
-            Route::post('whatsapp', [WhatsAppSettingsController::class, 'store'])->name('whatsapp.store');
             Route::delete('whatsapp', [WhatsAppSettingsController::class, 'destroy'])->name('whatsapp.destroy');
             Route::post('whatsapp/test-connection', [WhatsAppSettingsController::class, 'testConnection'])
                 ->name('whatsapp.test-connection');
+            Route::post('whatsapp/embedded-signup', [WhatsAppSettingsController::class, 'completeEmbeddedSignup'])
+                ->middleware('throttle:whatsapp-embedded-signup')
+                ->name('whatsapp.embedded-signup');
             Route::post('whatsapp/test-message', [WhatsAppSettingsController::class, 'testMessage'])
                 ->middleware('throttle:whatsapp-test')
                 ->name('whatsapp.test-message');

@@ -6,10 +6,11 @@ use App\Enums\WhatsAppProviderStatus;
 use App\Exceptions\WhatsAppNotAuthorizedException;
 use App\Exceptions\WhatsAppProviderNotConfiguredException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\WhatsApp\StoreWhatsAppProviderRequest;
+use App\Http\Requests\WhatsApp\CompleteWhatsAppEmbeddedSignupRequest;
 use App\Http\Requests\WhatsApp\TestWhatsAppMessageRequest;
 use App\Http\Resources\WhatsAppProviderResource;
 use App\Models\WhatsAppProvider;
+use App\Services\WhatsApp\MetaWhatsAppEmbeddedSignupService;
 use App\Services\WhatsApp\WhatsAppProviderResolver;
 use App\Services\WhatsAppSettingsService;
 use App\Support\ApiResponse;
@@ -31,17 +32,33 @@ class WhatsAppSettingsController extends Controller
         return ApiResponse::success([
             'own_provider' => $ownProvider ? new WhatsAppProviderResource($ownProvider) : null,
             'effective_source' => $resolution->authorized ? $resolution->source : 'disabled',
-            'shared_unavailable_reason' => $resolution->authorized ? null : $resolution->skipReason,
+            'unavailable_reason' => $resolution->authorized ? null : $resolution->skipReason,
+            'embedded_signup' => MetaWhatsAppEmbeddedSignupService::signupConfig(),
         ]);
     }
 
-    public function store(StoreWhatsAppProviderRequest $request, CompanyContext $context): JsonResponse
-    {
+    public function completeEmbeddedSignup(
+        CompleteWhatsAppEmbeddedSignupRequest $request,
+        CompanyContext $context,
+        MetaWhatsAppEmbeddedSignupService $embeddedSignup,
+    ): JsonResponse {
         $this->authorize('whatsapp.configure');
 
-        $provider = $this->settings->upsert($context->requireCompanyId(), $request->validated(), $request->user());
+        $data = $request->validated();
+        $provider = $embeddedSignup->connect(
+            $context->requireCompanyId(),
+            $data['code'],
+            $data['waba_id'],
+            $data['phone_number_id'] ?? null,
+            $request->user(),
+        );
 
-        return ApiResponse::success(new WhatsAppProviderResource($provider), 'WhatsApp configuration saved successfully.');
+        return ApiResponse::success(
+            new WhatsAppProviderResource($provider),
+            $provider->status === WhatsAppProviderStatus::Active
+                ? 'WhatsApp Business connected successfully.'
+                : 'WhatsApp was connected, but the connection could not be verified. Please test the connection.',
+        );
     }
 
     public function destroy(CompanyContext $context): JsonResponse
@@ -65,7 +82,7 @@ class WhatsAppSettingsController extends Controller
         );
     }
 
-    /** Tests whichever source is actually effective (own or shared) - not just the company's own saved config. */
+    /** Test messages always use the authenticated company's own active provider. */
     public function testMessage(TestWhatsAppMessageRequest $request, CompanyContext $context, WhatsAppProviderResolver $resolver): JsonResponse
     {
         $this->authorize('whatsapp.send');

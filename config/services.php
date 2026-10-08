@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'whatsapp' => [
+        'embedded_signup' => [
+            'app_id' => env('META_WHATSAPP_APP_ID'),
+            'app_secret' => env('META_WHATSAPP_APP_SECRET'),
+            'config_id' => env('META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID'),
+            'graph_api_version' => env('META_WHATSAPP_GRAPH_API_VERSION', 'v25.0'),
+            'webhook_verify_token' => env('META_WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
+        ],
+    ],
+
 ];

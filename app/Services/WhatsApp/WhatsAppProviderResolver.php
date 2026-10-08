@@ -9,8 +9,6 @@ use App\Models\WhatsAppProvider;
 
 class WhatsAppProviderResolver
 {
-    public function __construct(private readonly WhatsAppAccessResolver $accessResolver) {}
-
     public function resolve(int $companyId, ?int $customerId = null, ?int $actorUserId = null): WhatsAppResolution
     {
         $company = Company::find($companyId);
@@ -21,26 +19,13 @@ class WhatsAppProviderResolver
 
         $ownProvider = WhatsAppProvider::where('company_id', $companyId)
             ->where('status', WhatsAppProviderStatus::Active)
+            ->orderByDesc('id')
             ->first();
 
         if ($ownProvider) {
             return WhatsAppResolution::authorized($ownProvider, 'own');
         }
 
-        $sharedProvider = WhatsAppProvider::whereNull('company_id')
-            ->where('status', WhatsAppProviderStatus::Active)
-            ->first();
-
-        if (! $sharedProvider) {
-            return WhatsAppResolution::skipped('no_authorized_whatsapp_provider');
-        }
-
-        $access = $this->accessResolver->isAuthorized($companyId, $actorUserId);
-
-        if (! $access->authorized) {
-            return WhatsAppResolution::skipped($access->reason);
-        }
-
-        return WhatsAppResolution::authorized($sharedProvider, 'shared');
+        return WhatsAppResolution::skipped('no_company_whatsapp_provider');
     }
 }

@@ -22,14 +22,25 @@ class WhatsAppSettingsService
     /** $companyId is null for the Super Admin platform provider. */
     public function find(?int $companyId): ?WhatsAppProvider
     {
-        return $companyId === null
-            ? WhatsAppProvider::whereNull('company_id')->first()
-            : WhatsAppProvider::where('company_id', $companyId)->first();
+        return WhatsAppProvider::where('company_id', $companyId)
+            ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->first();
     }
 
-    public function upsert(?int $companyId, array $data, User $actor): WhatsAppProvider
+    public function upsert(
+        ?int $companyId,
+        array $data,
+        User $actor,
+        ?WhatsAppProvider $target = null,
+        bool $createNew = false,
+    ): WhatsAppProvider
     {
-        $provider = $this->find($companyId) ?? new WhatsAppProvider();
+        if ($target && $target->company_id !== $companyId) {
+            throw new \LogicException('A WhatsApp provider cannot be updated for a different company.');
+        }
+
+        $provider = $target ?? ($createNew ? new WhatsAppProvider() : ($this->find($companyId) ?? new WhatsAppProvider()));
         $isNew = ! $provider->exists;
 
         $provider->fill([
@@ -50,7 +61,9 @@ class WhatsAppSettingsService
         // Safely retrieve existing credentials. If decryption fails (e.g., APP_KEY changed
         // since they were stored), discard them and start fresh with only the new values.
         try {
-            $credentials = $provider->exists ? ($provider->credentials ?? []) : [];
+            $credentials = ! empty($data['replace_credentials'])
+                ? []
+                : ($provider->exists ? ($provider->credentials ?? []) : []);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('WhatsApp: could not decrypt existing credentials; starting fresh.', [
                 'provider_id' => $provider->id ?? 'new',
@@ -110,7 +123,17 @@ class WhatsAppSettingsService
     public function delete(WhatsAppProvider $provider, User $actor): void
     {
         $companyId = $provider->company_id;
-        $provider->delete();
+        $hasHistory = $provider->messages()->exists() || $provider->webhookEvents()->exists();
+
+        if ($hasHistory) {
+            $provider->status = WhatsAppProviderStatus::Inactive;
+            $provider->credentials = null;
+            $provider->sender_number = null;
+            $provider->last_error = null;
+            $provider->save();
+        } else {
+            $provider->delete();
+        }
 
         $this->audit->log(
             AuditAction::WhatsAppProviderDeleted->value,

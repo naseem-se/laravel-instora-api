@@ -41,6 +41,7 @@ jobs:
             #   > "storage/backups/backup_$(date +%F_%H-%M-%S).sql"
 
             php artisan migrate --force
+            php artisan db:seed --force
 
             php artisan optimize:clear
             php artisan config:cache

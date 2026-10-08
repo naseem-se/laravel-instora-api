@@ -9,6 +9,16 @@
 
 ## About Laravel
 
+## WhatsApp Business Embedded Signup
+
+Tenant WhatsApp connections use Meta's official Embedded Signup v4 and the existing encrypted `whatsapp_providers` storage, Cloud API adapter, notification jobs, and status webhook processing. Instora must be configured and approved as a Meta Tech Provider or Solution Partner for the required WhatsApp permissions. Configure `META_WHATSAPP_APP_ID`, `META_WHATSAPP_APP_SECRET`, and a v4 `META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`, plus a random `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`, in the backend environment. The app secret and tenant access tokens must never be exposed to the frontend.
+
+In the Meta app, configure Embedded Signup for eligible WhatsApp Business numbers (including Coexistence where enabled), and register `https://<backend-host>/api/v1/webhooks/whatsapp/meta` as the WhatsApp webhook callback with the same verify token. Subscribe to the `messages` and `account_update` webhook fields. The backend verifies webhook signatures with the Meta app secret and routes delivery statuses using each event's phone number ID. Set `META_WHATSAPP_GRAPH_API_VERSION` to a Graph API version supported by the Meta app.
+
+Meta references: [Embedded Signup v4](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/version-4), [implementation](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/implementation), and [WhatsApp Business app coexistence](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users).
+
+The platform-level WhatsApp provider remains available to administrators, but tenant notifications never fall back to it. Legacy shared-provider access settings do not enable tenant message sending.
+
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
 - [Simple, fast routing engine](https://laravel.com/docs/routing).

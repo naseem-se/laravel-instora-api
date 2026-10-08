@@ -74,9 +74,14 @@ class WhatsAppWebhookService
 
     private function applyStatusUpdate(WhatsAppProvider $provider, array $event, WhatsAppWebhookEvent $webhookEvent): void
     {
-        $message = WhatsAppMessage::where('provider_id', $provider->id)
-            ->where('provider_message_id', $event['message_id'])
-            ->first();
+        $messageQuery = WhatsAppMessage::where('provider_id', $provider->id)
+            ->where('provider_message_id', $event['message_id']);
+
+        if ($provider->company_id !== null) {
+            $messageQuery->where('company_id', $provider->company_id);
+        }
+
+        $message = $messageQuery->first();
 
         if (! $message) {
             $webhookEvent->status = WebhookEventStatus::Ignored;
@@ -84,7 +89,13 @@ class WhatsAppWebhookService
             return;
         }
 
-        $log = NotificationLog::find($message->notification_id);
+        $logQuery = NotificationLog::whereKey($message->notification_id);
+
+        if ($provider->company_id !== null) {
+            $logQuery->where('company_id', $provider->company_id);
+        }
+
+        $log = $logQuery->first();
         $newStatus = $this->mapStatus($event['status']);
 
         if (! $log || ! $newStatus) {

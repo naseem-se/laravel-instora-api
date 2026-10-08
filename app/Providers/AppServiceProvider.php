@@ -42,8 +42,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(3)->by('whatsapp-test:'.($request->user()?->company_id ?? $request->ip()));
         });
 
+        RateLimiter::for('whatsapp-embedded-signup', function ($request) {
+            return Limit::perMinute(5)->by('whatsapp-embedded-signup:'.($request->user()?->company_id ?? $request->ip()));
+        });
+
         RateLimiter::for('whatsapp-webhook', function ($request) {
-            return Limit::perMinute(120)->by('whatsapp-webhook:'.$request->route('provider'));
+            return Limit::perMinute(120)->by('whatsapp-webhook:'.($request->route('provider') ?? 'meta'));
         });
 
         // Points the reset link at the SPA frontend, not a Laravel Blade
