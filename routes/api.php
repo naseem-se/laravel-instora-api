@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\EvolutionApiController;
 use App\Http\Controllers\Api\V1\WhatsAppSettingsController;
 use App\Http\Controllers\Api\V1\WhatsAppWebhookController;
 use App\Http\Middleware\EnsureSuperAdmin;
@@ -167,6 +168,14 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('whatsapp/test-message', [WhatsAppSettingsController::class, 'testMessage'])
                 ->middleware('throttle:whatsapp-test')
                 ->name('whatsapp.test-message');
+
+            // Evolution API — QR code session routes
+            Route::post('whatsapp/evolution/init', [EvolutionApiController::class, 'initSession'])
+                ->name('whatsapp.evolution.init');
+            Route::get('whatsapp/evolution/status', [EvolutionApiController::class, 'sessionStatus'])
+                ->name('whatsapp.evolution.status');
+            Route::delete('whatsapp/evolution/disconnect', [EvolutionApiController::class, 'disconnect'])
+                ->name('whatsapp.evolution.disconnect');
         });
 
         Route::prefix('reports')->name('reports.')->group(function () {
