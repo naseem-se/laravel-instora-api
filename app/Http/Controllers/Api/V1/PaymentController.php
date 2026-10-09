@@ -18,6 +18,10 @@ use App\Support\CompanyContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class PaymentController extends Controller
 {
@@ -66,7 +70,9 @@ class PaymentController extends Controller
             $query->whereDate('payment_date', '<=', $toDate);
         }
 
-        $query->orderByDesc('payment_date');
+        $query->orderByDesc('payment_date')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         $payments = $query->paginate($request->integer('per_page', 20));
 
@@ -79,14 +85,41 @@ class PaymentController extends Controller
 
         $companyId = $context->requireCompanyId();
         $idempotencyKey = $request->header('Idempotency-Key');
+        $data = $request->validated();
+        $receipt = $data['receipt'] ?? null;
+        unset($data['receipt']);
+
+        $idempotencyPayload = $data;
+        if ($receipt) {
+            $idempotencyPayload['receipt_sha256'] = hash('sha256', $receipt->get());
+        }
 
         try {
-            $record = $this->idempotency->begin('payments.store', $companyId, $idempotencyKey, $request->validated());
+            $record = $this->idempotency->begin('payments.store', $companyId, $idempotencyKey, $idempotencyPayload);
         } catch (IdempotencyReplayException $e) {
             return response()->json($e->body, $e->status);
         }
 
-        $payment = $this->payments->create($request->validated(), $context, $request->user());
+        $receiptPath = null;
+        try {
+            if ($receipt) {
+                $receiptDisk = config('filesystems.documents_disk');
+                $receiptPath = $receipt->store("payments/{$companyId}/receipts", $receiptDisk);
+                if (! $receiptPath) {
+                    throw new RuntimeException('The uploaded payment receipt could not be stored.');
+                }
+                $data['receipt_path'] = $receiptPath;
+                $data['receipt_disk'] = $receiptDisk;
+            }
+
+            $payment = $this->payments->create($data, $context, $request->user());
+        } catch (Throwable $exception) {
+            if ($receiptPath) {
+                Storage::disk(config('filesystems.documents_disk'))->delete($receiptPath);
+            }
+            $record?->delete();
+            throw $exception;
+        }
 
         $response = ApiResponse::success(new PaymentResource($payment), 'Payment recorded successfully.', 201);
 
@@ -131,5 +164,24 @@ class PaymentController extends Controller
         ]);
 
         return $pdf->stream("{$payment->payment_number}.pdf");
+    }
+
+    public function receiptAttachment(int $id, CompanyContext $context): StreamedResponse
+    {
+        $payment = $this->findOwned(Payment::class, $id, $context);
+        $this->authorize('view', $payment);
+
+        abort_unless($payment->receipt_path && $payment->receipt_disk, 404);
+
+        $disk = Storage::disk($payment->receipt_disk);
+        abort_unless($disk->exists($payment->receipt_path), 404);
+
+        $extension = pathinfo($payment->receipt_path, PATHINFO_EXTENSION);
+        $filename = $payment->payment_number.($extension ? ".{$extension}" : '');
+
+        return $disk->response($payment->receipt_path, $filename, [
+            'Content-Type' => $disk->mimeType($payment->receipt_path) ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ], 'inline');
     }
 }

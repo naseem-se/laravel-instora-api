@@ -75,27 +75,47 @@ class CompanyService
 
     public function update(Company $company, array $data, User $actor): Company
     {
-        $original = $company->only(['name', 'email', 'phone', 'address', 'currency', 'timezone', 'status']);
+        return DB::transaction(function () use ($company, $data, $actor) {
+            $original = $company->only(['name', 'email', 'phone', 'address', 'currency', 'timezone', 'status']);
+            $nameChanged = isset($data['name']) && $data['name'] !== $company->name;
 
-        $company->fill(collect($data)->except(['status'])->toArray());
+            $company->fill(collect($data)->except(['status'])->toArray());
 
-        if (isset($data['status'])) {
-            $company->status = $data['status'];
-            $company->suspension_reason = $data['status'] === 'suspended' ? 'manual' : null;
-        }
+            if (isset($data['status'])) {
+                $company->status = $data['status'];
+                $company->suspension_reason = $data['status'] === 'suspended' ? 'manual' : null;
+            }
 
-        $company->save();
+            $company->save();
 
-        $this->audit->log(
-            AuditAction::CompanyUpdated->value,
-            entity: $company,
-            oldValues: $original,
-            newValues: $company->only(array_keys($original)),
-            companyId: $company->id,
-            userId: $actor->id,
-        );
+            if ($nameChanged) {
+                $registrar = app(PermissionRegistrar::class);
+                $originalTeamId = $registrar->getPermissionsTeamId();
 
-        return $company;
+                try {
+                    $registrar->setPermissionsTeamId($company->id);
+                    foreach ($company->users()->get() as $user) {
+                        if ($user->hasRole('Company Admin')) {
+                            $user->name = $company->name;
+                            $user->save();
+                        }
+                    }
+                } finally {
+                    $registrar->setPermissionsTeamId($originalTeamId);
+                }
+            }
+
+            $this->audit->log(
+                AuditAction::CompanyUpdated->value,
+                entity: $company,
+                oldValues: $original,
+                newValues: $company->only(array_keys($original)),
+                companyId: $company->id,
+                userId: $actor->id,
+            );
+
+            return $company;
+        });
     }
 
     public function delete(Company $company, User $actor): void
@@ -105,6 +125,24 @@ class CompanyService
             $documents = DB::table('customer_documents')->where('company_id', $company->id)->get();
             foreach ($documents as $doc) {
                 \Illuminate\Support\Facades\Storage::disk($doc->storage_disk)->delete($doc->file_path);
+            }
+
+            $paymentReceipts = DB::table('payments')
+                ->where('company_id', $company->id)
+                ->whereNotNull('receipt_path')
+                ->whereNotNull('receipt_disk')
+                ->get(['receipt_path', 'receipt_disk']);
+            foreach ($paymentReceipts as $receipt) {
+                \Illuminate\Support\Facades\Storage::disk($receipt->receipt_disk)->delete($receipt->receipt_path);
+            }
+
+            $saleReceipts = DB::table('sales')
+                ->where('company_id', $company->id)
+                ->whereNotNull('receipt_path')
+                ->whereNotNull('receipt_disk')
+                ->get(['receipt_path', 'receipt_disk']);
+            foreach ($saleReceipts as $receipt) {
+                \Illuminate\Support\Facades\Storage::disk($receipt->receipt_disk)->delete($receipt->receipt_path);
             }
 
             // Temporarily disable foreign key checks to delete all related data

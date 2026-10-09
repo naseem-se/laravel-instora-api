@@ -10,18 +10,19 @@ use App\Models\CustomerDocument;
 use App\Support\ApiResponse;
 use App\Support\CompanyContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class CustomerDocumentController extends Controller
 {
-    public function index(int $customerId, CompanyContext $context): JsonResponse
+    public function index(Request $request, int $customerId, CompanyContext $context): JsonResponse
     {
         $customer = $this->customer($customerId, $context);
         $this->authorize('view', $customer);
 
-        return ApiResponse::success(CustomerDocumentResource::collection(
-            $customer->documents()->latest()->get()
-        ));
+        $documents = $customer->documents()->latest()->paginate(min(max($request->integer('per_page', 10), 1), 100));
+
+        return ApiResponse::success(CustomerDocumentResource::collection($documents)->response()->getData(true));
     }
 
     public function store(StoreCustomerDocumentRequest $request, int $customerId, CompanyContext $context): JsonResponse

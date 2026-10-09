@@ -16,6 +16,8 @@ class SaleItem extends Model
             'unit_price' => 'decimal:2',
             'returned_quantity' => 'decimal:3',
             'line_total' => 'decimal:2',
+            'warranty_ends_at' => 'date',
+            'guarantee_ends_at' => 'date',
         ];
     }
 
@@ -32,5 +34,10 @@ class SaleItem extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(InventoryWarehouse::class);
+    }
+
+    public function productItem(): BelongsTo
+    {
+        return $this->belongsTo(ProductItem::class);
     }
 }

@@ -15,23 +15,35 @@ use App\Models\PlatformSubscriptionInvoice;
 use App\Services\SubscriptionService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class SubscriptionController extends Controller
 {
     public function __construct(private readonly SubscriptionService $subscriptions) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $companies = Company::with('subscription')->orderBy('name')->get();
+        $companies = Company::with('subscription')
+            ->orderBy('name')
+            ->paginate(min(max($request->integer('per_page', 20), 1), 100));
 
-        $data = $companies->map(fn ($company) => [
+        $data = $companies->getCollection()->map(fn ($company) => [
             'company_id' => $company->id,
             'company_name' => $company->name,
             'company_status' => $company->status->value,
             'subscription' => $company->subscription ? new SubscriptionResource($company->subscription) : null,
         ]);
 
-        return ApiResponse::success(['data' => $data->values()]);
+        return ApiResponse::success([
+            'data' => $data->values(),
+            'meta' => [
+                'current_page' => $companies->currentPage(),
+                'last_page' => $companies->lastPage(),
+                'from' => $companies->firstItem(),
+                'to' => $companies->lastItem(),
+                'total' => $companies->total(),
+            ],
+        ]);
     }
 
     public function store(StoreSubscriptionRequest $request, int $companyId): JsonResponse
@@ -45,18 +57,30 @@ class SubscriptionController extends Controller
         return ApiResponse::success(new SubscriptionResource($subscription), 'Subscription created successfully.', 201);
     }
 
-    public function show(int $companyId): JsonResponse
+    public function show(Request $request, int $companyId): JsonResponse
     {
         $subscription = PlatformSubscription::where('company_id', $companyId)->with('company')->firstOrFail();
 
-        $invoices = $subscription->invoices()->with('payments.recordedBy')->orderByDesc('period_start')->limit(24)->get();
+        $invoices = $subscription->invoices()
+            ->with('payments.recordedBy')
+            ->orderByDesc('period_start')
+            ->paginate(min(max($request->integer('per_page', 20), 1), 100));
 
         return ApiResponse::success([
             'subscription' => new SubscriptionResource($subscription),
-            'invoices' => $invoices->map(fn ($invoice) => [
-                ...(new SubscriptionInvoiceResource($invoice))->resolve(),
-                'payments' => SubscriptionPaymentResource::collection($invoice->payments)->resolve(),
-            ]),
+            'invoices' => [
+                'data' => $invoices->getCollection()->map(fn ($invoice) => [
+                    ...(new SubscriptionInvoiceResource($invoice))->resolve(),
+                    'payments' => SubscriptionPaymentResource::collection($invoice->payments)->resolve(),
+                ])->values(),
+                'meta' => [
+                    'current_page' => $invoices->currentPage(),
+                    'last_page' => $invoices->lastPage(),
+                    'from' => $invoices->firstItem(),
+                    'to' => $invoices->lastItem(),
+                    'total' => $invoices->total(),
+                ],
+            ],
         ]);
     }
 

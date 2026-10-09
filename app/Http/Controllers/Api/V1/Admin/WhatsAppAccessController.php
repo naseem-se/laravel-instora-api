@@ -11,17 +11,23 @@ use App\Models\WhatsAppAccess;
 use App\Services\WhatsAppAccessService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class WhatsAppAccessController extends Controller
 {
     public function __construct(private readonly WhatsAppAccessService $access) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $companies = Company::orderBy('name')->get();
-        $accessRows = WhatsAppAccess::whereNull('user_id')->get()->keyBy('company_id');
+        $companies = Company::orderBy('name')
+            ->paginate(min(max($request->integer('per_page', 20), 1), 100));
+        $companyIds = $companies->getCollection()->pluck('id');
+        $accessRows = WhatsAppAccess::whereNull('user_id')
+            ->whereIn('company_id', $companyIds)
+            ->get()
+            ->keyBy('company_id');
 
-        $data = $companies->map(fn ($company) => [
+        $data = $companies->getCollection()->map(fn ($company) => [
             'company_id' => $company->id,
             'company_name' => $company->name,
             'company_status' => $company->status->value,
@@ -29,7 +35,16 @@ class WhatsAppAccessController extends Controller
             'enabled' => (bool) ($accessRows[$company->id]->enabled ?? false),
         ]);
 
-        return ApiResponse::success(['data' => $data->values()]);
+        return ApiResponse::success([
+            'data' => $data->values(),
+            'meta' => [
+                'current_page' => $companies->currentPage(),
+                'last_page' => $companies->lastPage(),
+                'from' => $companies->firstItem(),
+                'to' => $companies->lastItem(),
+                'total' => $companies->total(),
+            ],
+        ]);
     }
 
     public function updateCompanyAccess(UpdateWhatsAppCompanyAccessRequest $request, int $companyId): JsonResponse
@@ -41,14 +56,21 @@ class WhatsAppAccessController extends Controller
         return ApiResponse::success(['company_id' => $companyId, 'enabled' => $access->enabled], 'Access updated successfully.');
     }
 
-    public function indexUsers(int $companyId): JsonResponse
+    public function indexUsers(Request $request, int $companyId): JsonResponse
     {
         Company::findOrFail($companyId);
 
-        $users = User::where('company_id', $companyId)->orderBy('name')->get();
-        $overrides = WhatsAppAccess::where('company_id', $companyId)->whereNotNull('user_id')->get()->keyBy('user_id');
+        $users = User::where('company_id', $companyId)
+            ->orderBy('name')
+            ->paginate(min(max($request->integer('per_page', 20), 1), 100));
+        $userIds = $users->getCollection()->pluck('id');
+        $overrides = WhatsAppAccess::where('company_id', $companyId)
+            ->whereNotNull('user_id')
+            ->whereIn('user_id', $userIds)
+            ->get()
+            ->keyBy('user_id');
 
-        $data = $users->map(fn ($user) => [
+        $data = $users->getCollection()->map(fn ($user) => [
             'user_id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
@@ -56,7 +78,16 @@ class WhatsAppAccessController extends Controller
             'override' => isset($overrides[$user->id]) ? (bool) $overrides[$user->id]->enabled : null,
         ]);
 
-        return ApiResponse::success(['data' => $data->values()]);
+        return ApiResponse::success([
+            'data' => $data->values(),
+            'meta' => [
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+                'from' => $users->firstItem(),
+                'to' => $users->lastItem(),
+                'total' => $users->total(),
+            ],
+        ]);
     }
 
     public function updateUserAccess(UpdateWhatsAppUserAccessRequest $request, int $companyId, int $userId): JsonResponse

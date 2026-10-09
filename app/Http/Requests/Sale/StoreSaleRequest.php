@@ -40,6 +40,8 @@ class StoreSaleRequest extends FormRequest
             'tax' => ['nullable', 'numeric', 'min:0'],
             'down_payment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'receipt' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
+            'product_item_id' => ['nullable', 'integer', Rule::exists('product_items', 'id')->where('company_id', $companyId)->where('status', 'in_stock')],
             'installment' => ['required_if:payment_type,installment', 'array'],
             'installment.start_date' => ['required_if:payment_type,installment', 'date'],
             'installment.financial_charge_type' => ['required_if:payment_type,installment', Rule::in(FinancialChargeType::values())],

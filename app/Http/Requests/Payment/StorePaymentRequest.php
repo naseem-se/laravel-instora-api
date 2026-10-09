@@ -34,6 +34,7 @@ class StorePaymentRequest extends FormRequest
             ],
             'reference_number' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
+            'receipt' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
         ];
     }
 }

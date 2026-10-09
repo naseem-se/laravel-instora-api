@@ -75,6 +75,8 @@ class SaleService
                 'down_payment' => Money::fromCents($data['payment_type'] === 'cash' ? $totalCents : $downPaymentCents),
                 'payment_method' => $data['payment_method'] ?? null,
                 'notes' => $data['notes'] ?? null,
+                'receipt_path' => $data['receipt_path'] ?? null,
+                'receipt_disk' => $data['receipt_disk'] ?? null,
                 'sold_at' => $data['payment_type'] === 'cash' ? now() : null,
             ]);
             $sale->company_id = $companyId;
@@ -82,7 +84,7 @@ class SaleService
             $sale->created_by = $actor->id;
             $sale->save();
 
-            $saleItem = $sale->items()->create([
+            $saleItemData = [
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'sku' => $product->sku,
@@ -90,7 +92,20 @@ class SaleService
                 'unit_price' => Money::fromCents($unitPriceCents),
                 'line_total' => Money::fromCents($subtotalCents),
                 'warehouse_id' => $data['warehouse_id'] ?? null,
-            ]);
+            ];
+
+            if ($product->warranty_days > 0) {
+                $saleItemData['warranty_ends_at'] = now()->addDays($product->warranty_days);
+            }
+            if ($product->guarantee_days > 0) {
+                $saleItemData['guarantee_ends_at'] = now()->addDays($product->guarantee_days);
+            }
+            if (!empty($data['product_item_id'])) {
+                $saleItemData['product_item_id'] = $data['product_item_id'];
+                \App\Models\ProductItem::where('id', $data['product_item_id'])->update(['status' => 'sold']);
+            }
+
+            $saleItem = $sale->items()->create($saleItemData);
             $this->changeStock($sale, $saleItem, $product, $quantity, 'out', 'Sale '.$sale->sale_number);
 
             if ($sale->payment_type === 'cash') {
@@ -306,6 +321,11 @@ class SaleService
             if (! $item->product_id) continue;
             $product = Product::withTrashed()->where('company_id', $sale->company_id)->whereKey($item->product_id)->lockForUpdate()->first();
             if ($product) $this->changeStock($sale, $item, $product, $item->quantity, 'in', $note, $actor);
+            
+            if ($item->product_item_id) {
+                \App\Models\ProductItem::where('id', $item->product_item_id)->update(['status' => 'returned']);
+            }
+
             $item->returned_quantity = $item->quantity;
             $item->save();
         }

@@ -146,14 +146,22 @@ class EvolutionApiProvider implements WhatsAppProviderInterface
         }
 
         // Build the flat payload Evolution API v2 expects.
-        // Text:  { "number": "...", "text": "plain string" }
-        // Media: { "number": "...", "mediatype": "IMAGE", ... }
+        // Adds delay and composing presence to mimic human behavior and prevent bans.
         if (is_string($messageBody)) {
             $endpoint = "{$baseUrl}/message/sendText/{$sessionName}";
-            $payload  = ['number' => $number, 'text' => $messageBody];
+            $payload  = [
+                'number' => $number, 
+                'text' => $messageBody,
+                'delay' => rand(1500, 3500),
+                'presence' => 'composing'
+            ];
         } else {
             $endpoint = "{$baseUrl}/message/sendMedia/{$sessionName}";
-            $payload  = array_merge(['number' => $number], $messageBody);
+            $payload  = array_merge([
+                'number' => $number,
+                'delay' => rand(2500, 4500),
+                'presence' => 'composing'
+            ], $messageBody);
         }
 
         try {

@@ -28,6 +28,9 @@ class SaleResource extends JsonResource
                 'unit_price' => $item->unit_price,
                 'line_total' => $item->line_total,
                 'warehouse' => $item->warehouse?->name,
+                'serial_number' => $item->productItem?->serial_number,
+                'warranty_ends_at' => $item->warranty_ends_at?->toDateString(),
+                'guarantee_ends_at' => $item->guarantee_ends_at?->toDateString(),
             ])),
             'subtotal' => $this->subtotal,
             'discount' => $this->discount,
@@ -55,6 +58,7 @@ class SaleResource extends JsonResource
                 'created_at' => $return->created_at?->toIso8601String(),
             ])),
             'notes' => $this->notes,
+            'receipt_available' => filled($this->receipt_path),
             'sold_at' => $this->sold_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

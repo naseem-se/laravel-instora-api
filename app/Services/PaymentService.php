@@ -19,7 +19,7 @@ use App\Support\CompanyContext;
 use App\Support\Money;
 use App\Support\NotificationVariables;
 use Illuminate\Support\Facades\DB;
-use App\Enums\NotificationChannel; use App\Enums\NotificationType; use App\Services\NotificationService;
+use App\Enums\NotificationType; use App\Services\NotificationService;
 
 class PaymentService
 {
@@ -72,6 +72,8 @@ class PaymentService
                 'cash_account_id' => $data['cash_account_id'] ?? null,
                 'reference_number' => $data['reference_number'] ?? null,
                 'notes' => $data['notes'] ?? null,
+                'receipt_path' => $data['receipt_path'] ?? null,
+                'receipt_disk' => $data['receipt_disk'] ?? null,
             ]);
             $payment->company_id = $companyId;
             $payment->payment_number = $this->nextPaymentNumber($companyId);

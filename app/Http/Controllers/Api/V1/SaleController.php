@@ -13,6 +13,10 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class SaleController extends Controller
 {
@@ -22,7 +26,7 @@ class SaleController extends Controller
     {
         $this->authorizeSales($request, 'sales.view');
         $query = Sale::query()
-            ->with(['customer', 'items.warehouse', 'invoice', 'installmentPlan', 'returns'])
+            ->with(['customer', 'items.warehouse', 'items.productItem', 'invoice', 'installmentPlan', 'returns'])
             ->where('company_id', $context->requireCompanyId());
 
         if ($request->filled('status')) $query->where('status', $request->input('status'));
@@ -44,7 +48,29 @@ class SaleController extends Controller
     public function store(StoreSaleRequest $request, CompanyContext $context): JsonResponse
     {
         $this->authorizeSales($request, 'sales.create');
-        $sale = $this->sales->create($request->validated(), $context, $request->user());
+        $data = $request->validated();
+        $receipt = $data['receipt'] ?? null;
+        unset($data['receipt']);
+
+        $receiptPath = null;
+        try {
+            if ($receipt) {
+                $receiptDisk = config('filesystems.documents_disk');
+                $receiptPath = $receipt->store('sales/'.$context->requireCompanyId().'/receipts', $receiptDisk);
+                if (! $receiptPath) {
+                    throw new RuntimeException('The uploaded sale receipt could not be stored.');
+                }
+                $data['receipt_path'] = $receiptPath;
+                $data['receipt_disk'] = $receiptDisk;
+            }
+
+            $sale = $this->sales->create($data, $context, $request->user());
+        } catch (Throwable $exception) {
+            if ($receiptPath) {
+                Storage::disk(config('filesystems.documents_disk'))->delete($receiptPath);
+            }
+            throw $exception;
+        }
 
         return ApiResponse::success(new SaleResource($sale), 'Sale created successfully.', 201);
     }
@@ -55,7 +81,7 @@ class SaleController extends Controller
         $sale = $this->findSale($id, $context);
 
         return ApiResponse::success(new SaleResource($sale->load([
-            'customer', 'items.warehouse', 'invoice.items', 'installmentPlan.installments', 'returns.items',
+            'customer', 'items.warehouse', 'items.productItem', 'invoice.items', 'installmentPlan.installments', 'returns.items',
         ])));
     }
 
@@ -108,6 +134,25 @@ class SaleController extends Controller
         ]);
 
         return $pdf->stream("agreement_{$sale->sale_number}.pdf");
+    }
+
+    public function receiptAttachment(Request $request, int $id, CompanyContext $context): StreamedResponse
+    {
+        $this->authorizeSales($request, 'sales.view');
+        $sale = $this->findSale($id, $context);
+
+        abort_unless($sale->receipt_path && $sale->receipt_disk, 404);
+
+        $disk = Storage::disk($sale->receipt_disk);
+        abort_unless($disk->exists($sale->receipt_path), 404);
+
+        $extension = pathinfo($sale->receipt_path, PATHINFO_EXTENSION);
+        $filename = $sale->sale_number.($extension ? ".{$extension}" : '');
+
+        return $disk->response($sale->receipt_path, $filename, [
+            'Content-Type' => $disk->mimeType($sale->receipt_path) ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+        ], 'inline');
     }
 
     private function findSale(int $id, CompanyContext $context): Sale

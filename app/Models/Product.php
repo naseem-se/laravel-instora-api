@@ -22,6 +22,9 @@ class Product extends Model
             'installment_price' => 'decimal:2',
             'stock_quantity' => 'decimal:3',
             'reorder_level' => 'decimal:3',
+            'has_serial_numbers' => 'boolean',
+            'warranty_days' => 'integer',
+            'guarantee_days' => 'integer',
             'status' => ActiveStatus::class,
         ];
     }

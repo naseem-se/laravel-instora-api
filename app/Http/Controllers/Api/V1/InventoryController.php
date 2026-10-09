@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryMovement;
 use App\Models\InventoryWarehouse;
 use App\Models\Product;
+use App\Models\ProductItem;
 use App\Support\ApiResponse;
 use App\Support\CompanyContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -237,6 +238,66 @@ class InventoryController extends Controller
         });
 
         return ApiResponse::success($movement, 'Stock movement recorded.', 201);
+    }
+
+    public function storeProductItem(Request $request, CompanyContext $context): JsonResponse
+    {
+        $this->authorizeInventory($request, 'inventory.manage');
+        $companyId = $context->requireCompanyId();
+
+        $data = $request->validate([
+            'product_id' => ['required', 'integer', Rule::exists('products', 'id')->where('company_id', $companyId)->where('status', 'active')],
+            'serial_numbers' => ['required', 'array', 'min:1', 'max:100'],
+            'serial_numbers.*' => ['required', 'string', 'max:150'],
+            'warehouse_id' => ['nullable', 'integer', Rule::exists('inventory_warehouses', 'id')->where('company_id', $companyId)],
+        ]);
+
+        $product = Product::query()->where('company_id', $companyId)->whereKey($data['product_id'])->firstOrFail();
+
+        if (! $product->has_serial_numbers) {
+            throw ValidationException::withMessages(['product_id' => 'This product does not have serial number tracking enabled.']);
+        }
+
+        $created = [];
+        $duplicates = [];
+
+        DB::transaction(function () use ($data, $companyId, $product, &$created, &$duplicates) {
+            foreach ($data['serial_numbers'] as $serial) {
+                $serial = trim($serial);
+                if (empty($serial)) continue;
+
+                $exists = ProductItem::where('company_id', $companyId)
+                    ->where('product_id', $product->id)
+                    ->where('serial_number', $serial)
+                    ->where('status', 'in_stock')
+                    ->exists();
+
+                if ($exists) {
+                    $duplicates[] = $serial;
+                    continue;
+                }
+
+                $item = ProductItem::create([
+                    'company_id' => $companyId,
+                    'product_id' => $product->id,
+                    'serial_number' => $serial,
+                    'status' => 'in_stock',
+                    'warehouse_id' => $data['warehouse_id'] ?? null,
+                ]);
+
+                $created[] = $item;
+            }
+        });
+
+        $message = count($created) . ' serial number(s) added.';
+        if (! empty($duplicates)) {
+            $message .= ' ' . count($duplicates) . ' duplicate(s) skipped: ' . implode(', ', array_slice($duplicates, 0, 5));
+        }
+
+        return ApiResponse::success([
+            'created' => $created,
+            'duplicates' => $duplicates,
+        ], $message, 201);
     }
 
     private function balance(int $companyId, int $productId, ?int $warehouseId): float

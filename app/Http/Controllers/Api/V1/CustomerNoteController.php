@@ -9,15 +9,16 @@ use App\Models\Customer;
 use App\Support\ApiResponse;
 use App\Support\CompanyContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class CustomerNoteController extends Controller
 {
-    public function index(int $customerId, CompanyContext $context): JsonResponse
+    public function index(Request $request, int $customerId, CompanyContext $context): JsonResponse
     {
         $customer = $this->findOwned(Customer::class, $customerId, $context);
         $this->authorize('view', $customer);
 
-        $notes = $customer->notes()->with('user')->latest()->paginate(20);
+        $notes = $customer->notes()->with('user')->latest()->paginate(min(max($request->integer('per_page', 10), 1), 100));
 
         return ApiResponse::success(CustomerNoteResource::collection($notes)->response()->getData(true));
     }

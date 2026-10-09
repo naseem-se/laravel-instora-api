@@ -11,6 +11,8 @@ use App\Services\Notification\NotificationChannelResolver;
 use Illuminate\Support\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\RateLimited;
+use Illuminate\Support\Facades\Redis;
 
 class SendNotificationJob implements ShouldQueue
 {
@@ -25,12 +27,25 @@ class SendNotificationJob implements ShouldQueue
         return [30, 120, 600, 1800];
     }
 
+
     public function handle(NotificationChannelResolver $channels): void
     {
         $log = NotificationLog::find($this->notificationLogId);
 
         if (! $log) {
             return;
+        }
+
+        if ($log->channel === \App\Enums\NotificationChannel::WhatsApp) {
+            $key = 'whatsapp_sending_' . $log->company_id;
+            
+            // Limit to 15 WhatsApp messages per minute per company to avoid bans
+            if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($key, 15)) {
+                $this->release(\Illuminate\Support\Facades\RateLimiter::availableIn($key) ?: 10);
+                return;
+            }
+            
+            \Illuminate\Support\Facades\RateLimiter::hit($key, 60);
         }
 
         // Already terminal - a manual retry or a duplicate dispatch got

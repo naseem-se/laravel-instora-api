@@ -102,6 +102,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
         Route::apiResource('products', ProductController::class)
             ->parameters(['products' => 'id']);
+        Route::get('products/{product}/items', [ProductController::class, 'items'])->name('products.items');
 
         Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
         Route::get('inventory/history', [InventoryController::class, 'history'])->name('inventory.history');
@@ -109,6 +110,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('inventory/warehouses', [InventoryController::class, 'storeWarehouse'])->name('inventory.warehouses.store');
         Route::put('inventory/warehouses/{id}', [InventoryController::class, 'updateWarehouse'])->name('inventory.warehouses.update');
         Route::delete('inventory/warehouses/{id}', [InventoryController::class, 'destroyWarehouse'])->name('inventory.warehouses.destroy');
+        Route::post('inventory/product-items', [InventoryController::class, 'storeProductItem'])->name('inventory.product-items.store');
 
         Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
         Route::post('sales', [SaleController::class, 'store'])->name('sales.store');
@@ -117,6 +119,15 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('sales/{id}/return', [SaleController::class, 'return'])->name('sales.return');
         Route::get('sales/{id}/invoice', [SaleController::class, 'invoice'])->name('sales.invoice');
         Route::get('sales/{id}/agreement', [SaleController::class, 'agreement'])->name('sales.agreement');
+        Route::get('sales/{id}/receipt-attachment', [SaleController::class, 'receiptAttachment'])->name('sales.receipt-attachment');
+
+        Route::get('quotations', [\App\Http\Controllers\Api\V1\QuotationController::class, 'index'])->name('quotations.index');
+        Route::post('quotations', [\App\Http\Controllers\Api\V1\QuotationController::class, 'store'])->name('quotations.store');
+        Route::get('quotations/{id}', [\App\Http\Controllers\Api\V1\QuotationController::class, 'show'])->name('quotations.show');
+        Route::post('quotations/{id}/convert', [\App\Http\Controllers\Api\V1\QuotationController::class, 'convertToSale'])->name('quotations.convert');
+        Route::patch('quotations/{id}/status', [\App\Http\Controllers\Api\V1\QuotationController::class, 'updateStatus'])->name('quotations.status');
+        Route::delete('quotations/{id}', [\App\Http\Controllers\Api\V1\QuotationController::class, 'destroy'])->name('quotations.destroy');
+
 
         Route::apiResource('installment-plans', InstallmentPlanController::class)
             ->only(['index', 'store', 'show', 'destroy'])
@@ -144,6 +155,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('payments.reverse');
         Route::get('payments/{id}/receipt', [PaymentController::class, 'receiptPdf'])
             ->name('payments.receipt');
+        Route::get('payments/{id}/receipt-attachment', [PaymentController::class, 'receiptAttachment'])
+            ->name('payments.receipt-attachment');
 
         Route::apiResource('notifications', NotificationController::class)
             ->only(['index', 'show'])

@@ -16,7 +16,7 @@ use App\Models\User;
 use App\Support\Money;
 use App\Support\NotificationVariables;
 use Illuminate\Support\Facades\DB;
-use App\Enums\NotificationChannel; use App\Enums\NotificationType; use App\Services\NotificationService;
+use App\Enums\NotificationType; use App\Services\NotificationService;
 
 class PaymentReversalService
 {

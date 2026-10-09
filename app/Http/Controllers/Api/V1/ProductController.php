@@ -83,4 +83,27 @@ class ProductController extends Controller
 
         return ApiResponse::success(null, 'Product deleted successfully.');
     }
+
+    public function items(int $id, \Illuminate\Http\Request $request, CompanyContext $context): JsonResponse
+    {
+        $product = $this->findOwned(Product::class, $id, $context);
+        $this->authorize('view', $product);
+
+        $query = \App\Models\ProductItem::query()
+            ->where('company_id', $context->requireCompanyId())
+            ->where('product_id', $product->id)
+            ->where('status', 'in_stock');
+            
+        if ($warehouseId = $request->input('warehouse_id')) {
+            $query->where('warehouse_id', $warehouseId);
+        }
+
+        if ($search = $request->input('search')) {
+            $query->where('serial_number', 'like', "%{$search}%");
+        }
+
+        $items = $query->limit(50)->get();
+
+        return ApiResponse::success(['data' => $items]);
+    }
 }

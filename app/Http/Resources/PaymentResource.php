@@ -25,6 +25,7 @@ class PaymentResource extends JsonResource
             'payment_method' => $this->payment_method->value,
             'reference_number' => $this->reference_number,
             'notes' => $this->notes,
+            'receipt_available' => filled($this->receipt_path),
             'status' => $this->status->value,
             'received_by' => $this->whenLoaded('receivedBy', fn () => $this->receivedBy?->name),
             'allocations' => PaymentAllocationResource::collection($this->whenLoaded('allocations')),
