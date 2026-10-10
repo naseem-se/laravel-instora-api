@@ -36,7 +36,7 @@ class SendNotificationJob implements ShouldQueue
             return;
         }
 
-        if ($log->channel === \App\Enums\NotificationChannel::WhatsApp) {
+        if ($log->channel === \App\Enums\NotificationChannel::Whatsapp) {
             $key = 'whatsapp_sending_' . $log->company_id;
             
             // Limit to 15 WhatsApp messages per minute per company to avoid bans
