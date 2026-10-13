@@ -75,6 +75,40 @@ class SaleController extends Controller
         return ApiResponse::success(new SaleResource($sale), 'Sale created successfully.', 201);
     }
 
+    public function update(StoreSaleRequest $request, int $id, CompanyContext $context): JsonResponse
+    {
+        $this->authorizeSales($request, 'sales.manage');
+        $sale = $this->findSale($id, $context);
+        $data = $request->validated();
+        $receipt = $data['receipt'] ?? null;
+        unset($data['receipt']);
+
+        $receiptPath = null;
+        try {
+            if ($receipt) {
+                $receiptDisk = config('filesystems.documents_disk');
+                $receiptPath = $receipt->store('sales/'.$context->requireCompanyId().'/receipts', $receiptDisk);
+                if (! $receiptPath) {
+                    throw new RuntimeException('The uploaded sale receipt could not be stored.');
+                }
+                $data['receipt_path'] = $receiptPath;
+                $data['receipt_disk'] = $receiptDisk;
+            } else {
+                $data['receipt_path'] = $sale->receipt_path;
+                $data['receipt_disk'] = $sale->receipt_disk;
+            }
+
+            $replacement = $this->sales->replace($sale, $data, $context, $request->user());
+        } catch (Throwable $exception) {
+            if ($receiptPath) {
+                Storage::disk(config('filesystems.documents_disk'))->delete($receiptPath);
+            }
+            throw $exception;
+        }
+
+        return ApiResponse::success(new SaleResource($replacement), 'Sale order updated. The previous order was cancelled and replaced.');
+    }
+
     public function show(Request $request, int $id, CompanyContext $context): JsonResponse
     {
         $this->authorizeSales($request, 'sales.view');

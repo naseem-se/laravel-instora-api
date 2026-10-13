@@ -115,6 +115,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
         Route::post('sales', [SaleController::class, 'store'])->name('sales.store');
         Route::get('sales/{id}', [SaleController::class, 'show'])->name('sales.show');
+        Route::put('sales/{id}', [SaleController::class, 'update'])->name('sales.update');
         Route::post('sales/{id}/cancel', [SaleController::class, 'cancel'])->name('sales.cancel');
         Route::post('sales/{id}/return', [SaleController::class, 'return'])->name('sales.return');
         Route::get('sales/{id}/invoice', [SaleController::class, 'invoice'])->name('sales.invoice');

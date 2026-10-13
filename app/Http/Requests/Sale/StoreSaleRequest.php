@@ -6,6 +6,8 @@ use App\Enums\FinancialChargeType;
 use App\Enums\InstallmentFrequency;
 use App\Enums\LateFeeType;
 use App\Enums\PaymentMethod;
+use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -21,6 +23,7 @@ class StoreSaleRequest extends FormRequest
     public function rules(): array
     {
         $companyId = app(CompanyContext::class)->requireCompanyId();
+        $saleId = $this->route('id');
 
         return [
             'customer_id' => ['nullable', 'required_without:new_customer', 'integer', Rule::exists('customers', 'id')->where('company_id', $companyId)->whereNull('deleted_at')],
@@ -36,12 +39,23 @@ class StoreSaleRequest extends FormRequest
             'payment_type' => ['required', Rule::in(['cash', 'installment'])],
             'payment_method' => ['required', Rule::in(PaymentMethod::values())],
             'discount' => ['nullable', 'numeric', 'min:0'],
+            'unit_price' => ['nullable', 'numeric', 'min:0'],
             'additional_charges' => ['nullable', 'numeric', 'min:0'],
             'tax' => ['nullable', 'numeric', 'min:0'],
             'down_payment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'receipt' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
-            'product_item_id' => ['nullable', 'integer', Rule::exists('product_items', 'id')->where('company_id', $companyId)->where('status', 'in_stock')],
+            'product_item_id' => [
+                'nullable', 'integer',
+                Rule::exists('product_items', 'id')->where('company_id', $companyId)->where(function ($query) use ($saleId, $companyId) {
+                    $query->where('status', 'in_stock');
+                    if ($saleId) {
+                        $query->orWhereIn('id', SaleItem::query()
+                            ->select('product_item_id')
+                            ->whereIn('sale_id', Sale::query()->select('id')->whereKey($saleId)->where('company_id', $companyId)));
+                    }
+                }),
+            ],
             'installment' => ['required_if:payment_type,installment', 'array'],
             'installment.start_date' => ['required_if:payment_type,installment', 'date'],
             'installment.financial_charge_type' => ['required_if:payment_type,installment', Rule::in(FinancialChargeType::values())],

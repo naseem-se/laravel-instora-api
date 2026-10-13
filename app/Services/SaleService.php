@@ -48,7 +48,7 @@ class SaleService
             $product = Product::query()->where('company_id', $companyId)->whereKey($data['product_id'])->where('status', 'active')->lockForUpdate()->firstOrFail();
 
             $quantity = (int) $data['quantity'];
-            $unitPriceCents = Money::toCents($product->cash_price);
+            $unitPriceCents = Money::toCents($data['unit_price'] ?? $product->cash_price);
             $subtotalCents = $unitPriceCents * $quantity;
             $discountCents = Money::toCents($data['discount'] ?? 0);
             $chargesCents = Money::toCents($data['additional_charges'] ?? 0);
@@ -153,6 +153,50 @@ class SaleService
             );
 
             return $sale->load(['customer', 'items', 'installmentPlan', 'invoice.items']);
+        });
+    }
+
+    public function replace(Sale $sale, array $data, CompanyContext $context, User $actor): Sale
+    {
+        return DB::transaction(function () use ($sale, $data, $context, $actor) {
+            Company::query()->whereKey($sale->company_id)->lockForUpdate()->firstOrFail();
+            $sale = Sale::query()
+                ->with(['installmentPlan', 'items', 'payments', 'invoice'])
+                ->where('company_id', $context->requireCompanyId())
+                ->whereKey($sale->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $oldStatus = $sale->status;
+
+            if ($sale->installmentPlan && in_array(
+                $sale->installmentPlan->status,
+                [InstallmentPlanStatus::Completed, InstallmentPlanStatus::Settled, InstallmentPlanStatus::Defaulted],
+                true,
+            )) {
+                throw new BusinessException(
+                    'A completed, settled, or defaulted installment plan cannot be edited.',
+                    'FINALIZED_INSTALLMENT_SALE_NOT_EDITABLE',
+                );
+            }
+
+            if (in_array($sale->status, ['pending', 'completed'], true)) {
+                $this->cancel($sale, 'Replaced by an edited sale order', $actor);
+            } elseif (! in_array($sale->status, ['cancelled', 'returned'], true)) {
+                throw new BusinessException('This sale cannot be edited in its current state.', 'SALE_NOT_EDITABLE');
+            }
+
+            $replacement = $this->create($data, $context, $actor);
+
+            $this->audit->log(
+                AuditAction::SaleReplaced->value,
+                entity: $sale,
+                oldValues: ['sale_number' => $sale->sale_number, 'status' => $oldStatus],
+                newValues: ['replacement_sale_id' => $replacement->id, 'replacement_sale_number' => $replacement->sale_number],
+                companyId: $sale->company_id,
+                userId: $actor->id,
+            );
+
+            return $replacement;
         });
     }
 

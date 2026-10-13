@@ -25,6 +25,7 @@ enum AuditAction: string
     case PaymentCreated = 'payment.created';
     case PaymentReversed = 'payment.reversed';
     case SaleCreated = 'sale.created';
+    case SaleReplaced = 'sale.replaced';
     case SaleCancelled = 'sale.cancelled';
     case SaleReturned = 'sale.returned';
     case NotificationRetried = 'notification.retried';
